@@ -1,0 +1,35 @@
+name: todolist
+description: "A new Flutter project."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.9.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  url_launcher: ^6.3.2
+  image_picker: ^1.1.2 #thêm thư viện
+  drag_and_drop_lists: ^0.4.2
+  fl_chart: ^0.69.0
+  provider: ^6.1.5+1
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+  flutter_launcher_icons: ^0.14.4  # 👈 Đưa vào đây, không nằm trong dependencies
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/icon/app_icon.png  # 👈 Đảm bảo file icon có trong thư mục này
+
+# 👇 Cấu hình flutter_launcher_icons phải đặt NGANG hàng với flutter:, không lùi vào trong
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: "assets/icon/app_icon.png"

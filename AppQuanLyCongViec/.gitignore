@@ -1,0 +1,25 @@
+# User secrets file (contains sensitive data)
+**/secrets.json
+
+# Local development settings (may contain sensitive data)
+**/appsettings.Development.json
+
+# Build output
+[Bb]in/
+[Oo]bj/
+
+# Visual Studio files
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Rider files
+.idea/
+*.iml
+
+# VS Code files
+.vscode/
+
+# ... other ignores ...

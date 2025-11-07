@@ -2,9 +2,11 @@ using CollabTask.Api.Data;
 using CollabTask.Api.Dtos.Tasks;
 using CollabTask.Api.Helpers;
 using CollabTask.Api.Models;
+using CollabTask.Api.Services.PriorityScoringService;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Task = CollabTask.Api.Models.Task;
 
 namespace CollabTask.Api.Controllers
 {
@@ -14,10 +16,29 @@ namespace CollabTask.Api.Controllers
     public class TasksController : ControllerBase
     {
         private readonly CollabTaskDbContext _context;
+        private readonly IPriorityScoringService _scoringService;
 
-        public TasksController(CollabTaskDbContext context)
+        public TasksController(CollabTaskDbContext context, IPriorityScoringService scoringService)
         {
             _context = context;
+            _scoringService = scoringService;
+        }
+            [HttpGet("/api/tasks/suggested")] // Đặt route ở cấp cao nhất
+        public async Task<ActionResult<IEnumerable<TaskDto>>> GetSuggestedTasks()
+        {
+            var userId = User.GetUserId();
+            if (userId == Guid.Empty) return Unauthorized();
+
+            try
+            {
+                var suggestedTasks = await _scoringService.GetSuggestedTasksAsync(userId);
+                return Ok(suggestedTasks);
+            }
+            catch (Exception ex)
+            {
+                // TODO: Thêm log lỗi chi tiết
+                return StatusCode(500, $"Internal server error: {ex.Message}");
+            }
         }
 
         // GET: api/workspaces/{workspaceId}/tasks

@@ -12,5 +12,10 @@ namespace CollabTask.Api.Dtos.Tasks
         public int? EstimatedTimeMinutes { get; set; }
         public Guid CreatorUserID { get; set; }
         public DateTime CreatedAt { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public DateTime? CompletedAt { get; set; }
+        public List<Guid> AssigneeUserIds { get; set; } = new List<Guid>();
+        public decimal? PriorityScore { get; set; }
+
     }
 }

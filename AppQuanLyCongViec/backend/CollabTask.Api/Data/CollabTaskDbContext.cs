@@ -21,6 +21,7 @@ namespace CollabTask.Api.Data
         public DbSet<Notification> Notifications { get; set; }
         public DbSet<ActivityLog> ActivityLogs { get; set; }
         public DbSet<UserInteractionForAI> UserInteractionsForAI { get; set; }
+        public DbSet<UserTaskWeight> UserTaskWeights { get; set; }
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
@@ -47,6 +48,12 @@ namespace CollabTask.Api.Data
                 .WithMany(sr => sr.Users)
                 .HasForeignKey(u => u.SystemRoleID)
                 .OnDelete(DeleteBehavior.Restrict);
+            
+            modelBuilder.Entity<User>()
+                .HasOne(u => u.TaskWeights) 
+                .WithOne(utw => utw.User)
+                .HasForeignKey<UserTaskWeight>(utw => utw.UserID)
+                .OnDelete(DeleteBehavior.Cascade);
 
             modelBuilder.Entity<Workspace>()
                 .HasOne(w => w.Owner)

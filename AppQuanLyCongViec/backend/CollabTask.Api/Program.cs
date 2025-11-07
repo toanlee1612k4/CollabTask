@@ -1,21 +1,25 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
 using CollabTask.Api.Data;
 using CollabTask.Api.Services.AuthService;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.IdentityModel.Tokens;
+using CollabTask.Api.Services.PriorityScoringService; // <-- THÊM USING NÀY
 using Microsoft.OpenApi.Models;
 using Swashbuckle.AspNetCore.Filters;
-using System.Text;
+using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
-builder.Services.AddControllers();
-builder.Services.AddEndpointsApiExplorer();
-
-// Cấu hình Swagger để hỗ trợ JWT
-builder.Services.AddSwaggerGen(options =>
+builder.Services.AddControllers().AddJsonOptions(options =>
 {
+    options.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
+    options.JsonSerializerOptions.WriteIndented = true; 
+});
+
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen(options => {
     options.AddSecurityDefinition("oauth2", new OpenApiSecurityScheme
     {
         Description = "Standard Authorization header using the Bearer scheme (\"bearer {token}\")",
@@ -58,8 +62,12 @@ builder.Services.AddCors(options =>
     });
 });
 
+// Add Memory Cache
+builder.Services.AddMemoryCache(); // <-- THÊM DÒNG NÀY
+
 // Register services
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IPriorityScoringService, PriorityScoringService>(); // <-- Dòng này đã có
 
 var app = builder.Build();
 
@@ -69,8 +77,10 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
-
-app.UseHttpsRedirection();
+else
+{
+    app.UseHttpsRedirection();
+}
 
 app.UseCors("AllowAll");
 
@@ -79,13 +89,11 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-// Đảm bảo CSDL được tạo (chỉ dùng cho development)
+// Ensure database is created
 using (var scope = app.Services.CreateScope())
 {
     var context = scope.ServiceProvider.GetRequiredService<CollabTaskDbContext>();
-    // context.Database.Migrate(); // Nên dùng migrations cho production
     context.Database.EnsureCreated();
 }
-
 
 app.Run();

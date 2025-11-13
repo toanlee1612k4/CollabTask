@@ -6,7 +6,7 @@ namespace CollabTask.Api.Dtos.Workspaces
     {
         [Required]
         [MaxLength(150)]
-        public string WorkspaceName { get; set; }
+        public string WorkspaceName { get; set; } = string.Empty;
 
         public string? Description { get; set; }
     }

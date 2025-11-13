@@ -2,35 +2,33 @@ using CollabTask.Api.Data;
 using CollabTask.Api.Dtos.Tasks;
 using CollabTask.Api.Models;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Memory; // <-- THÊM USING NÀY
-using Task = CollabTask.Api.Models.Task; // Alias
+using Microsoft.Extensions.Caching.Memory;
+using Task = CollabTask.Api.Models.Task;
 
 namespace CollabTask.Api.Services.PriorityScoringService
 {
     public class PriorityScoringService : IPriorityScoringService
     {
         private readonly CollabTaskDbContext _context;
-        private readonly IMemoryCache _cache; // <-- THÊM MEMORY CACHE
+        private readonly IMemoryCache _cache;
 
-        // Trọng số mặc định (cho người dùng mới)
+        // Trọng số mặc định
         private const decimal DefaultDeadlineWeight = 0.5m;
         private const decimal DefaultImportanceWeight = 0.3m;
         private const decimal DefaultEffortWeight = 0.2m;
 
-        // Cập nhật Constructor
-        public PriorityScoringService(CollabTaskDbContext context, IMemoryCache cache) // <-- INJECT CACHE
+        public PriorityScoringService(CollabTaskDbContext context, IMemoryCache cache)
         {
             _context = context;
-            _cache = cache; // <-- LƯU LẠI CACHE
+            _cache = cache;
         }
 
         public async Task<List<TaskDto>> GetSuggestedTasksAsync(Guid userId)
         {
-            // 1. Lấy trọng số (W) của người dùng
+            // 1. Lấy trọng số của người dùng
             var userWeights = await _context.UserTaskWeights.FindAsync(userId);
             if (userWeights == null)
             {
-                // Nếu không có, dùng trọng số mặc định
                 userWeights = new UserTaskWeight
                 {
                     UserID = userId,
@@ -40,11 +38,12 @@ namespace CollabTask.Api.Services.PriorityScoringService
                 };
             }
 
-            // 2. Lấy các task phù hợp để gợi ý (ToDo, InProgress, Overdue)
+            // 2. Lấy các task phù hợp
             var relevantStatuses = new[] { "ToDo", "InProgress", "Overdue" };
             var userTasks = await _context.Tasks
                 .Include(t => t.TaskAssignments)
-                .Where(t => t.TaskAssignments.Any(ta => ta.AssigneeUserID == userId) && relevantStatuses.Contains(t.Status))
+                .Where(t => t.TaskAssignments.Any(ta => ta.AssigneeUserID == userId) 
+                         && relevantStatuses.Contains(t.Status))
                 .ToListAsync();
 
             // 3. Tính điểm cho từng task
@@ -56,31 +55,18 @@ namespace CollabTask.Api.Services.PriorityScoringService
                 decimal importanceScore = CalculateImportanceScore(task);
                 decimal effortScore = CalculateEffortScore(task);
 
-                // Áp dụng công thức Weighted Scoring Model
-                decimal priorityScore = (userWeights.DeadlineWeight * deadlineScore) +
-                                        (userWeights.ImportanceWeight * importanceScore) +
-                                        (userWeights.EffortWeight * effortScore);
+                decimal priorityScore = (deadlineScore * userWeights.DeadlineWeight) +
+                                       (importanceScore * userWeights.ImportanceWeight) +
+                                       (effortScore * userWeights.EffortWeight);
 
                 scoredTasks.Add((task, priorityScore));
             }
 
-            // 4. Sắp xếp
+            // 4. Sắp xếp và chuyển sang DTO
             var sortedTasksWithScore = scoredTasks
                 .OrderByDescending(t => t.PriorityScore)
                 .ToList();
 
-            // === SỬA LỖI LOGIC: LƯU LẠI GỢI Ý VÀO CACHE ===
-            // Lưu Top 5 TaskID được gợi ý vào cache trong 1 giờ
-            var suggestedTaskIds = sortedTasksWithScore
-                                    .Select(t => t.Task.TaskID)
-                                    .Take(5) // Chỉ lưu Top 5
-                                    .ToList();
-            
-            var cacheKey = $"suggested_{userId}";
-            _cache.Set(cacheKey, suggestedTaskIds, TimeSpan.FromHours(1));
-            // ===============================================
-
-            // 5. Trả về DTO
             var sortedTaskDtos = sortedTasksWithScore
                 .Select(t => new TaskDto
                 {
@@ -96,28 +82,32 @@ namespace CollabTask.Api.Services.PriorityScoringService
                     CreatedAt = t.Task.CreatedAt,
                     CompletedAt = t.Task.CompletedAt,
                     AssigneeUserIds = t.Task.TaskAssignments.Select(ta => ta.AssigneeUserID).ToList(),
-                    PriorityScore = priorityScore // Thêm điểm số để gỡ lỗi hoặc hiển thị
+                    PriorityScore = t.PriorityScore
                 })
                 .ToList();
+
+            // 5. Lưu vào cache để track WasSuggested
+            var cacheKey = $"suggested_{userId}";
+            var suggestedIds = sortedTaskDtos.Select(t => t.TaskId).ToList();
+            _cache.Set(cacheKey, suggestedIds, TimeSpan.FromHours(24));
 
             return sortedTaskDtos;
         }
 
-        // Giai đoạn 2: Thu thập dữ liệu
-        public async System.Threading.Tasks.Task LogTaskCompletion(Task task, Guid userId) // Thêm System.Threading.Tasks.Task
+        public async System.Threading.Tasks.Task LogTaskCompletion(Task task, Guid userId)
         {
-            // Kiểm tra xem user có phải là assignee không
+            // Kiểm tra user có phải assignee không
             var isAssignee = await _context.TaskAssignments
                 .AnyAsync(ta => ta.TaskID == task.TaskID && ta.AssigneeUserID == userId);
 
-            if (!isAssignee) return; // Chỉ log nếu người hoàn thành là người được gán
+            if (!isAssignee) return;
 
-            // Tính các điểm S_D, S_I, S_E tại thời điểm hoàn thành
+            // Tính các điểm số tại thời điểm hoàn thành
             decimal deadlineScore = CalculateDeadlineScore(task, task.CompletedAt ?? DateTime.UtcNow);
             decimal importanceScore = CalculateImportanceScore(task);
             decimal effortScore = CalculateEffortScore(task);
 
-            // === SỬA LỖI LOGIC: KIỂM TRA CACHE ĐỂ LẤY `WasSuggested` ===
+            // Kiểm tra cache để lấy WasSuggested
             var cacheKey = $"suggested_{userId}";
             bool wasSuggested = false;
             if (_cache.TryGetValue(cacheKey, out List<Guid>? suggestedIds))
@@ -127,9 +117,9 @@ namespace CollabTask.Api.Services.PriorityScoringService
                     wasSuggested = true;
                 }
             }
-            // =======================================================
 
-            var interaction = new UserInteractionForAI
+            // Lưu log vào database
+            var completionLog = new UserTaskCompletionLog
             {
                 UserID = userId,
                 TaskID = task.TaskID,
@@ -137,59 +127,57 @@ namespace CollabTask.Api.Services.PriorityScoringService
                 DeadlineScore = deadlineScore,
                 ImportanceScore = importanceScore,
                 EffortScore = effortScore,
-                WasSuggested = wasSuggested // <-- SỬ DỤNG GIÁ TRỊ ĐÚNG
+                WasSuggested = wasSuggested
             };
 
-            _context.UserInteractionsForAI.Add(interaction);
-            // SaveChangesAsync() sẽ được gọi ở Controller
+            _context.UserTaskCompletionLogs.Add(completionLog);
+            await _context.SaveChangesAsync();
         }
 
-
         // =================================================================
-        // HÀM HELPER TÍNH ĐIỂM THÀNH PHẦN (S)
+        // HÀM HELPER TÍNH ĐIỂM
         // =================================================================
 
-        // S_D - Điểm Deadline (Tính Khẩn cấp)
         private decimal CalculateDeadlineScore(Task task, DateTime? completionTime = null)
         {
-            if (task.Deadline == null) return 0; // Không có deadline, không khẩn cấp
+            if (task.Deadline == null)
+                return 0.5m;
 
-            var referenceTime = completionTime ?? DateTime.UtcNow;
-            
-            // Số ngày còn lại (có thể là số âm nếu quá hạn)
-            double daysRemaining = (task.Deadline.Value - referenceTime).TotalDays;
+            var checkTime = completionTime ?? DateTime.UtcNow;
+            var daysRemaining = (task.Deadline.Value - checkTime).TotalDays;
 
-            if (daysRemaining < -7) return 0; // Quá hạn quá 1 tuần, không tính
-            if (daysRemaining < 0) return 10; // Đang quá hạn, điểm cao nhất
-            if (daysRemaining < 1) return 9;  // Trong ngày hôm nay
-            if (daysRemaining < 2) return 8;  // Trong 1-2 ngày
-            if (daysRemaining < 7) return 5;  // Trong 1 tuần
-            if (daysRemaining < 14) return 2; // Trong 2 tuần
-            return 1; // Hơn 2 tuần
+            if (daysRemaining < -7) return 0.1m;
+            if (daysRemaining < 0) return 0.3m;
+            if (daysRemaining < 1) return 1.0m;
+            if (daysRemaining < 2) return 0.9m;
+            if (daysRemaining < 7) return 0.7m;
+            if (daysRemaining < 14) return 0.5m;
+
+            return 0.3m;
         }
 
-        // S_I - Điểm Quan trọng (Do người dùng đặt)
         private decimal CalculateImportanceScore(Task task)
         {
             switch (task.Priority?.ToLower())
             {
-                case "high": return 10;
-                case "medium": return 5;
-                case "low": return 1;
-                default: return 5;
+                case "high": return 1.0m;
+                case "medium": return 0.6m;
+                case "low": return 0.3m;
+                default: return 0.5m;
             }
         }
 
-        // S_E - Điểm Nỗ lực (Thời gian ước tính)
         private decimal CalculateEffortScore(Task task)
         {
-            if (task.EstimatedTimeMinutes == null || task.EstimatedTimeMinutes <= 0) return 1; // Không có ước tính, coi là > 4 giờ
+            if (task.EstimatedTimeMinutes == null || task.EstimatedTimeMinutes <= 0)
+                return 0.5m;
 
-            int minutes = task.EstimatedTimeMinutes.Value;
+            var minutes = task.EstimatedTimeMinutes.Value;
 
-            if (minutes <= 60) return 10;        // Dưới 1 giờ
-            if (minutes <= 240) return 5;       // Từ 1 - 4 giờ
-            return 1;                           // Trên 4 giờ
+            if (minutes <= 60) return 1.0m;
+            if (minutes <= 240) return 0.7m;
+
+            return 0.4m;
         }
     }
 }

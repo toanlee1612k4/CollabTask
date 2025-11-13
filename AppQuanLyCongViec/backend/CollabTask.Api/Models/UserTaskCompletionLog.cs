@@ -3,9 +3,11 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace CollabTask.Api.Models
 {
-    public class UserInteractionForAI
+    [Table("UserInteractionsForAI")] // Map tới bảng UserInteractionsForAI trong DB
+    public class UserTaskCompletionLog
     {
         [Key]
+        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
         public long InteractionID { get; set; }
 
         [Required]
@@ -14,6 +16,7 @@ namespace CollabTask.Api.Models
         [Required]
         public Guid TaskID { get; set; }
 
+        [Required]
         public DateTime CompletedTimestamp { get; set; }
 
         [Column(TypeName = "decimal(5,2)")]
@@ -29,9 +32,9 @@ namespace CollabTask.Api.Models
 
         // Navigation properties
         [ForeignKey("UserID")]
-        public virtual User User { get; set; } = null!;
+        public User? User { get; set; }
 
         [ForeignKey("TaskID")]
-        public virtual Task Task { get; set; } = null!;
+        public Task? Task { get; set; }
     }
 }

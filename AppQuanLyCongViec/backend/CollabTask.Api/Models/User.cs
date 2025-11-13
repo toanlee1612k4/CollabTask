@@ -36,6 +36,9 @@ namespace CollabTask.Api.Models
         public virtual ICollection<Comment> Comments { get; set; } = new List<Comment>();
         public virtual ICollection<Notification> Notifications { get; set; } = new List<Notification>();
         public virtual ICollection<ActivityLog> ActivityLogs { get; set; } = new List<ActivityLog>();
-         public virtual UserTaskWeight? TaskWeights { get; set; }
+
+        // === THÊM DÒNG NÀY ĐỂ SỬA LỖI ===
+        // Thêm navigation property cho TaskWeights
+        public virtual UserTaskWeight? TaskWeights { get; set; }
     }
 }

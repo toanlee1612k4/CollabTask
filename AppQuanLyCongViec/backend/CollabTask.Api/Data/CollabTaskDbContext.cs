@@ -1,65 +1,43 @@
 using Microsoft.EntityFrameworkCore;
 using CollabTask.Api.Models;
-using Task = CollabTask.Api.Models.Task;
 
 namespace CollabTask.Api.Data
 {
     public class CollabTaskDbContext : DbContext
     {
-        public CollabTaskDbContext(DbContextOptions<CollabTaskDbContext> options) : base(options) { }
+        public CollabTaskDbContext(DbContextOptions<CollabTaskDbContext> options) : base(options)
+        {
+        }
 
-        // DbSets
         public DbSet<User> Users { get; set; }
-        public DbSet<SystemRole> SystemRoles { get; set; }
         public DbSet<Workspace> Workspaces { get; set; }
         public DbSet<WorkspaceMember> WorkspaceMembers { get; set; }
-        public DbSet<Task> Tasks { get; set; } // Dòng này giờ đã rõ ràng
+        public DbSet<Models.Task> Tasks { get; set; }
         public DbSet<TaskAssignment> TaskAssignments { get; set; }
+        public DbSet<Comment> Comments { get; set; }
         public DbSet<Tag> Tags { get; set; }
         public DbSet<TaskTag> TaskTags { get; set; }
-        public DbSet<Comment> Comments { get; set; }
-        public DbSet<Notification> Notifications { get; set; }
         public DbSet<ActivityLog> ActivityLogs { get; set; }
-        public DbSet<UserInteractionForAI> UserInteractionsForAI { get; set; }
+        public DbSet<Notification> Notifications { get; set; }
+        public DbSet<SystemRole> SystemRoles { get; set; }
         public DbSet<UserTaskWeight> UserTaskWeights { get; set; }
+        public DbSet<UserTaskCompletionLog> UserTaskCompletionLogs { get; set; }
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
 
-            // Seed data for SystemRoles
-            modelBuilder.Entity<SystemRole>().HasData(
-                new SystemRole { RoleID = 1, RoleName = "SystemAdmin" },
-                new SystemRole { RoleID = 2, RoleName = "User" }
-            );
+            // User
+            modelBuilder.Entity<User>()
+                .HasKey(u => u.UserID);
 
-            // Configure composite keys
+            // Workspace
+            modelBuilder.Entity<Workspace>()
+                .HasKey(w => w.WorkspaceID);
+
+            // WorkspaceMember - Composite Key
             modelBuilder.Entity<WorkspaceMember>()
                 .HasKey(wm => new { wm.WorkspaceID, wm.UserID });
-
-            modelBuilder.Entity<TaskAssignment>()
-                .HasKey(ta => new { ta.TaskID, ta.AssigneeUserID });
-
-            modelBuilder.Entity<TaskTag>()
-                .HasKey(tt => new { tt.TaskID, tt.TagID });
-
-            // Configure relationships
-            modelBuilder.Entity<User>()
-                .HasOne(u => u.SystemRole)
-                .WithMany(sr => sr.Users)
-                .HasForeignKey(u => u.SystemRoleID)
-                .OnDelete(DeleteBehavior.Restrict);
-            
-            modelBuilder.Entity<User>()
-                .HasOne(u => u.TaskWeights) 
-                .WithOne(utw => utw.User)
-                .HasForeignKey<UserTaskWeight>(utw => utw.UserID)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            modelBuilder.Entity<Workspace>()
-                .HasOne(w => w.Owner)
-                .WithMany(u => u.OwnedWorkspaces)
-                .HasForeignKey(w => w.OwnerUserID)
-                .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<WorkspaceMember>()
                 .HasOne(wm => wm.Workspace)
@@ -71,19 +49,27 @@ namespace CollabTask.Api.Data
                 .HasOne(wm => wm.User)
                 .WithMany(u => u.WorkspaceMemberships)
                 .HasForeignKey(wm => wm.UserID)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
 
-            modelBuilder.Entity<Task>()
+            // Task
+            modelBuilder.Entity<Models.Task>()
+                .HasKey(t => t.TaskID);
+
+            modelBuilder.Entity<Models.Task>()
                 .HasOne(t => t.Workspace)
                 .WithMany(w => w.Tasks)
                 .HasForeignKey(t => t.WorkspaceID)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            modelBuilder.Entity<Task>()
+            modelBuilder.Entity<Models.Task>()
                 .HasOne(t => t.Creator)
                 .WithMany(u => u.CreatedTasks)
                 .HasForeignKey(t => t.CreatorUserID)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            // TaskAssignment - Composite Key
+            modelBuilder.Entity<TaskAssignment>()
+                .HasKey(ta => new { ta.TaskID, ta.AssigneeUserID });
 
             modelBuilder.Entity<TaskAssignment>()
                 .HasOne(ta => ta.Task)
@@ -95,13 +81,21 @@ namespace CollabTask.Api.Data
                 .HasOne(ta => ta.Assignee)
                 .WithMany(u => u.TaskAssignments)
                 .HasForeignKey(ta => ta.AssigneeUserID)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // UserTaskWeight
+            modelBuilder.Entity<UserTaskWeight>()
+                .HasKey(utw => utw.UserID);
+
+            modelBuilder.Entity<UserTaskWeight>()
+                .HasOne(utw => utw.User)
+                .WithMany()
+                .HasForeignKey(utw => utw.UserID)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            modelBuilder.Entity<Tag>()
-                .HasOne(tag => tag.Workspace)
-                .WithMany(w => w.Tags)
-                .HasForeignKey(tag => tag.WorkspaceID)
-                .OnDelete(DeleteBehavior.Cascade);
+            // TaskTag - Composite Key
+            modelBuilder.Entity<TaskTag>()
+                .HasKey(tt => new { tt.TaskID, tt.TagID });
 
             modelBuilder.Entity<TaskTag>()
                 .HasOne(tt => tt.Task)
@@ -111,63 +105,30 @@ namespace CollabTask.Api.Data
 
             modelBuilder.Entity<TaskTag>()
                 .HasOne(tt => tt.Tag)
-                .WithMany(tag => tag.TaskTags)
+                .WithMany(t => t.TaskTags)
                 .HasForeignKey(tt => tt.TagID)
-                .OnDelete(DeleteBehavior.NoAction);
-
-            modelBuilder.Entity<Comment>()
-                .HasOne(c => c.Task)
-                .WithMany(t => t.Comments)
-                .HasForeignKey(c => c.TaskID)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            modelBuilder.Entity<Comment>()
-                .HasOne(c => c.User)
-                .WithMany(u => u.Comments)
-                .HasForeignKey(c => c.UserID)
-                .OnDelete(DeleteBehavior.Restrict);
+            // UserTaskCompletionLog - Map to UserInteractionsForAI table
+            modelBuilder.Entity<UserTaskCompletionLog>()
+                .ToTable("UserInteractionsForAI")
+                .HasKey(utcl => utcl.InteractionID);
 
-            modelBuilder.Entity<Notification>()
-                .HasOne(n => n.User)
-                .WithMany(u => u.Notifications)
-                .HasForeignKey(n => n.UserID)
-                .OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<UserTaskCompletionLog>()
+                .Property(utcl => utcl.InteractionID)
+                .ValueGeneratedOnAdd();
 
-            modelBuilder.Entity<ActivityLog>()
-                .HasOne(al => al.User)
-                .WithMany(u => u.ActivityLogs)
-                .HasForeignKey(al => al.UserID)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            modelBuilder.Entity<UserInteractionForAI>()
-                .HasOne(ui => ui.User)
+            modelBuilder.Entity<UserTaskCompletionLog>()
+                .HasOne(utcl => utcl.User)
                 .WithMany()
-                .HasForeignKey(ui => ui.UserID)
+                .HasForeignKey(utcl => utcl.UserID)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            modelBuilder.Entity<UserInteractionForAI>()
-                .HasOne(ui => ui.Task)
+            modelBuilder.Entity<UserTaskCompletionLog>()
+                .HasOne(utcl => utcl.Task)
                 .WithMany()
-                .HasForeignKey(ui => ui.TaskID)
+                .HasForeignKey(utcl => utcl.TaskID)
                 .OnDelete(DeleteBehavior.Restrict);
-
-            // Configure indexes for performance
-            modelBuilder.Entity<Task>()
-                .HasIndex(t => t.WorkspaceID);
-
-            modelBuilder.Entity<Task>()
-                .HasIndex(t => t.Status);
-
-            modelBuilder.Entity<TaskAssignment>()
-                .HasIndex(ta => ta.AssigneeUserID);
-
-            modelBuilder.Entity<WorkspaceMember>()
-                .HasIndex(wm => wm.UserID);
-
-            // Configure unique constraints
-            modelBuilder.Entity<Tag>()
-                .HasIndex(tag => new { tag.WorkspaceID, tag.TagName })
-                .IsUnique();
         }
     }
 }

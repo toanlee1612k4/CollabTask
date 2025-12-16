@@ -14,6 +14,7 @@ namespace CollabTask.Api.Data
         public DbSet<WorkspaceMember> WorkspaceMembers { get; set; }
         public DbSet<Models.Task> Tasks { get; set; }
         public DbSet<TaskAssignment> TaskAssignments { get; set; }
+        public DbSet<TaskAssignmentHistory> TaskAssignmentHistories { get; set; }
         public DbSet<Comment> Comments { get; set; }
         public DbSet<Tag> Tags { get; set; }
         public DbSet<TaskTag> TaskTags { get; set; }
@@ -22,6 +23,8 @@ namespace CollabTask.Api.Data
         public DbSet<SystemRole> SystemRoles { get; set; }
         public DbSet<UserTaskWeight> UserTaskWeights { get; set; }
         public DbSet<UserTaskCompletionLog> UserTaskCompletionLogs { get; set; }
+        public DbSet<TaskAttachment> TaskAttachments { get; set; }
+        public DbSet<WorkspaceInvitation> WorkspaceInvitations { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -59,7 +62,7 @@ namespace CollabTask.Api.Data
                 .HasOne(t => t.Workspace)
                 .WithMany(w => w.Tasks)
                 .HasForeignKey(t => t.WorkspaceID)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.NoAction); // SỬA: Cascade -> NoAction để tránh circular cascade
 
             modelBuilder.Entity<Models.Task>()
                 .HasOne(t => t.Creator)
@@ -81,6 +84,46 @@ namespace CollabTask.Api.Data
                 .HasOne(ta => ta.Assignee)
                 .WithMany(u => u.TaskAssignments)
                 .HasForeignKey(ta => ta.AssigneeUserID)
+                .OnDelete(DeleteBehavior.Restrict);
+                
+            modelBuilder.Entity<TaskAssignment>()
+                .HasOne(ta => ta.Assigner)
+                .WithMany()
+                .HasForeignKey(ta => ta.AssignerUserID)
+                .OnDelete(DeleteBehavior.Restrict);
+                
+            modelBuilder.Entity<TaskAssignment>()
+                .HasOne(ta => ta.ApprovedBy)
+                .WithMany()
+                .HasForeignKey(ta => ta.ApprovedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+                
+            // TaskAssignmentHistory
+            modelBuilder.Entity<TaskAssignmentHistory>()
+                .HasKey(tah => tah.HistoryID);
+                
+            modelBuilder.Entity<TaskAssignmentHistory>()
+                .HasOne(tah => tah.Task)
+                .WithMany()
+                .HasForeignKey(tah => tah.TaskID)
+                .OnDelete(DeleteBehavior.Cascade);
+                
+            modelBuilder.Entity<TaskAssignmentHistory>()
+                .HasOne(tah => tah.Assignee)
+                .WithMany()
+                .HasForeignKey(tah => tah.AssigneeUserID)
+                .OnDelete(DeleteBehavior.Restrict);
+                
+            modelBuilder.Entity<TaskAssignmentHistory>()
+                .HasOne(tah => tah.PreviousAssignee)
+                .WithMany()
+                .HasForeignKey(tah => tah.PreviousAssigneeUserID)
+                .OnDelete(DeleteBehavior.Restrict);
+                
+            modelBuilder.Entity<TaskAssignmentHistory>()
+                .HasOne(tah => tah.ActionBy)
+                .WithMany()
+                .HasForeignKey(tah => tah.ActionByUserID)
                 .OnDelete(DeleteBehavior.Restrict);
 
             // UserTaskWeight
@@ -129,6 +172,26 @@ namespace CollabTask.Api.Data
                 .WithMany()
                 .HasForeignKey(utcl => utcl.TaskID)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            // WorkspaceInvitation
+            modelBuilder.Entity<WorkspaceInvitation>()
+                .HasKey(wi => wi.InvitationID);
+
+            modelBuilder.Entity<WorkspaceInvitation>()
+                .HasOne(wi => wi.Workspace)
+                .WithMany()
+                .HasForeignKey(wi => wi.WorkspaceID)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<WorkspaceInvitation>()
+                .HasOne(wi => wi.InvitedBy)
+                .WithMany()
+                .HasForeignKey(wi => wi.InvitedByUserID)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<WorkspaceInvitation>()
+                .HasIndex(wi => new { wi.WorkspaceID, wi.Email, wi.Status })
+                .HasDatabaseName("IX_WorkspaceInvitation_Workspace_Email_Status");
         }
     }
 }

@@ -101,6 +101,13 @@ namespace CollabTask.Api.Migrations
                         .HasMaxLength(512)
                         .HasColumnType("nvarchar(512)");
 
+                    b.Property<Guid?>("RelatedEntityID")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("RelatedEntityType")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
                     b.Property<Guid>("UserID")
                         .HasColumnType("uniqueidentifier");
 
@@ -127,18 +134,6 @@ namespace CollabTask.Api.Migrations
                     b.HasKey("RoleID");
 
                     b.ToTable("SystemRoles");
-
-                    b.HasData(
-                        new
-                        {
-                            RoleID = 1,
-                            RoleName = "SystemAdmin"
-                        },
-                        new
-                        {
-                            RoleID = 2,
-                            RoleName = "User"
-                        });
                 });
 
             modelBuilder.Entity("CollabTask.Api.Models.Tag", b =>
@@ -164,8 +159,7 @@ namespace CollabTask.Api.Migrations
 
                     b.HasKey("TagID");
 
-                    b.HasIndex("WorkspaceID", "TagName")
-                        .IsUnique();
+                    b.HasIndex("WorkspaceID");
 
                     b.ToTable("Tags");
                 });
@@ -216,8 +210,6 @@ namespace CollabTask.Api.Migrations
 
                     b.HasIndex("CreatorUserID");
 
-                    b.HasIndex("Status");
-
                     b.HasIndex("WorkspaceID");
 
                     b.ToTable("Tasks");
@@ -233,14 +225,133 @@ namespace CollabTask.Api.Migrations
                         .HasColumnType("uniqueidentifier")
                         .HasColumnOrder(1);
 
+                    b.Property<string>("ApprovalNote")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("ApprovedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("ApprovedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<DateTime>("AssignedAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<Guid>("AssignerUserID")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("CompletionRequestedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("ResponseAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ResponseNote")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
                     b.HasKey("TaskID", "AssigneeUserID");
+
+                    b.HasIndex("ApprovedByUserId");
 
                     b.HasIndex("AssigneeUserID");
 
+                    b.HasIndex("AssignerUserID");
+
                     b.ToTable("TaskAssignments");
+                });
+
+            modelBuilder.Entity("CollabTask.Api.Models.TaskAssignmentHistory", b =>
+                {
+                    b.Property<Guid>("HistoryID")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime>("ActionAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("ActionByUserID")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("AssigneeUserID")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("NewStatus")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("Note")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid?>("PreviousAssigneeUserID")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("PreviousStatus")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<Guid>("TaskID")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("HistoryID");
+
+                    b.HasIndex("ActionByUserID");
+
+                    b.HasIndex("AssigneeUserID");
+
+                    b.HasIndex("PreviousAssigneeUserID");
+
+                    b.HasIndex("TaskID");
+
+                    b.ToTable("TaskAssignmentHistories");
+                });
+
+            modelBuilder.Entity("CollabTask.Api.Models.TaskAttachment", b =>
+                {
+                    b.Property<Guid>("AttachmentID")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<string>("FilePath")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<long>("FileSize")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("FileType")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<Guid>("TaskID")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("UploadedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("UploadedByUserID")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("AttachmentID");
+
+                    b.HasIndex("TaskID");
+
+                    b.HasIndex("UploadedByUserID");
+
+                    b.ToTable("TaskAttachments");
                 });
 
             modelBuilder.Entity("CollabTask.Api.Models.TaskTag", b =>
@@ -289,14 +400,19 @@ namespace CollabTask.Api.Migrations
                     b.Property<int>("SystemRoleID")
                         .HasColumnType("int");
 
+                    b.Property<Guid?>("TaskWeightsUserID")
+                        .HasColumnType("uniqueidentifier");
+
                     b.HasKey("UserID");
 
                     b.HasIndex("SystemRoleID");
 
+                    b.HasIndex("TaskWeightsUserID");
+
                     b.ToTable("Users");
                 });
 
-            modelBuilder.Entity("CollabTask.Api.Models.UserInteractionForAI", b =>
+            modelBuilder.Entity("CollabTask.Api.Models.UserTaskCompletionLog", b =>
                 {
                     b.Property<long>("InteractionID")
                         .ValueGeneratedOnAdd()
@@ -331,7 +447,7 @@ namespace CollabTask.Api.Migrations
 
                     b.HasIndex("UserID");
 
-                    b.ToTable("UserInteractionsForAI");
+                    b.ToTable("UserInteractionsForAI", (string)null);
                 });
 
             modelBuilder.Entity("CollabTask.Api.Models.UserTaskWeight", b =>
@@ -340,13 +456,13 @@ namespace CollabTask.Api.Migrations
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<decimal>("DeadlineWeight")
-                        .HasColumnType("decimal(5, 2)");
+                        .HasColumnType("decimal(5,2)");
 
                     b.Property<decimal>("EffortWeight")
-                        .HasColumnType("decimal(5, 2)");
+                        .HasColumnType("decimal(5,2)");
 
                     b.Property<decimal>("ImportanceWeight")
-                        .HasColumnType("decimal(5, 2)");
+                        .HasColumnType("decimal(5,2)");
 
                     b.Property<DateTime>("LastUpdatedAt")
                         .HasColumnType("datetime2");
@@ -386,6 +502,53 @@ namespace CollabTask.Api.Migrations
                     b.ToTable("Workspaces");
                 });
 
+            modelBuilder.Entity("CollabTask.Api.Models.WorkspaceInvitation", b =>
+                {
+                    b.Property<Guid>("InvitationID")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<Guid>("InvitedByUserID")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Message")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime?>("RespondedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<Guid>("WorkspaceID")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("InvitationID");
+
+                    b.HasIndex("InvitedByUserID");
+
+                    b.HasIndex("WorkspaceID", "Email", "Status")
+                        .HasDatabaseName("IX_WorkspaceInvitation_Workspace_Email_Status");
+
+                    b.ToTable("WorkspaceInvitations");
+                });
+
             modelBuilder.Entity("CollabTask.Api.Models.WorkspaceMember", b =>
                 {
                     b.Property<Guid>("WorkspaceID")
@@ -416,7 +579,7 @@ namespace CollabTask.Api.Migrations
                     b.HasOne("CollabTask.Api.Models.User", "User")
                         .WithMany("ActivityLogs")
                         .HasForeignKey("UserID")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.Navigation("User");
@@ -433,7 +596,7 @@ namespace CollabTask.Api.Migrations
                     b.HasOne("CollabTask.Api.Models.User", "User")
                         .WithMany("Comments")
                         .HasForeignKey("UserID")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.Navigation("Task");
@@ -474,7 +637,7 @@ namespace CollabTask.Api.Migrations
                     b.HasOne("CollabTask.Api.Models.Workspace", "Workspace")
                         .WithMany("Tasks")
                         .HasForeignKey("WorkspaceID")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.NoAction)
                         .IsRequired();
 
                     b.Navigation("Creator");
@@ -484,10 +647,21 @@ namespace CollabTask.Api.Migrations
 
             modelBuilder.Entity("CollabTask.Api.Models.TaskAssignment", b =>
                 {
+                    b.HasOne("CollabTask.Api.Models.User", "ApprovedBy")
+                        .WithMany()
+                        .HasForeignKey("ApprovedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("CollabTask.Api.Models.User", "Assignee")
                         .WithMany("TaskAssignments")
                         .HasForeignKey("AssigneeUserID")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("CollabTask.Api.Models.User", "Assigner")
+                        .WithMany()
+                        .HasForeignKey("AssignerUserID")
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.HasOne("CollabTask.Api.Models.Task", "Task")
@@ -496,9 +670,66 @@ namespace CollabTask.Api.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.Navigation("ApprovedBy");
+
                     b.Navigation("Assignee");
 
+                    b.Navigation("Assigner");
+
                     b.Navigation("Task");
+                });
+
+            modelBuilder.Entity("CollabTask.Api.Models.TaskAssignmentHistory", b =>
+                {
+                    b.HasOne("CollabTask.Api.Models.User", "ActionBy")
+                        .WithMany()
+                        .HasForeignKey("ActionByUserID")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("CollabTask.Api.Models.User", "Assignee")
+                        .WithMany()
+                        .HasForeignKey("AssigneeUserID")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("CollabTask.Api.Models.User", "PreviousAssignee")
+                        .WithMany()
+                        .HasForeignKey("PreviousAssigneeUserID")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("CollabTask.Api.Models.Task", "Task")
+                        .WithMany()
+                        .HasForeignKey("TaskID")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ActionBy");
+
+                    b.Navigation("Assignee");
+
+                    b.Navigation("PreviousAssignee");
+
+                    b.Navigation("Task");
+                });
+
+            modelBuilder.Entity("CollabTask.Api.Models.TaskAttachment", b =>
+                {
+                    b.HasOne("CollabTask.Api.Models.Task", "Task")
+                        .WithMany()
+                        .HasForeignKey("TaskID")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("CollabTask.Api.Models.User", "UploadedBy")
+                        .WithMany()
+                        .HasForeignKey("UploadedByUserID")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Task");
+
+                    b.Navigation("UploadedBy");
                 });
 
             modelBuilder.Entity("CollabTask.Api.Models.TaskTag", b =>
@@ -506,7 +737,7 @@ namespace CollabTask.Api.Migrations
                     b.HasOne("CollabTask.Api.Models.Tag", "Tag")
                         .WithMany("TaskTags")
                         .HasForeignKey("TagID")
-                        .OnDelete(DeleteBehavior.NoAction)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.HasOne("CollabTask.Api.Models.Task", "Task")
@@ -525,13 +756,19 @@ namespace CollabTask.Api.Migrations
                     b.HasOne("CollabTask.Api.Models.SystemRole", "SystemRole")
                         .WithMany("Users")
                         .HasForeignKey("SystemRoleID")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("CollabTask.Api.Models.UserTaskWeight", "TaskWeights")
+                        .WithMany()
+                        .HasForeignKey("TaskWeightsUserID");
+
                     b.Navigation("SystemRole");
+
+                    b.Navigation("TaskWeights");
                 });
 
-            modelBuilder.Entity("CollabTask.Api.Models.UserInteractionForAI", b =>
+            modelBuilder.Entity("CollabTask.Api.Models.UserTaskCompletionLog", b =>
                 {
                     b.HasOne("CollabTask.Api.Models.Task", "Task")
                         .WithMany()
@@ -553,8 +790,8 @@ namespace CollabTask.Api.Migrations
             modelBuilder.Entity("CollabTask.Api.Models.UserTaskWeight", b =>
                 {
                     b.HasOne("CollabTask.Api.Models.User", "User")
-                        .WithOne("TaskWeights")
-                        .HasForeignKey("CollabTask.Api.Models.UserTaskWeight", "UserID")
+                        .WithMany()
+                        .HasForeignKey("UserID")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
@@ -566,10 +803,29 @@ namespace CollabTask.Api.Migrations
                     b.HasOne("CollabTask.Api.Models.User", "Owner")
                         .WithMany("OwnedWorkspaces")
                         .HasForeignKey("OwnerUserID")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.Navigation("Owner");
+                });
+
+            modelBuilder.Entity("CollabTask.Api.Models.WorkspaceInvitation", b =>
+                {
+                    b.HasOne("CollabTask.Api.Models.User", "InvitedBy")
+                        .WithMany()
+                        .HasForeignKey("InvitedByUserID")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("CollabTask.Api.Models.Workspace", "Workspace")
+                        .WithMany()
+                        .HasForeignKey("WorkspaceID")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("InvitedBy");
+
+                    b.Navigation("Workspace");
                 });
 
             modelBuilder.Entity("CollabTask.Api.Models.WorkspaceMember", b =>
@@ -577,7 +833,7 @@ namespace CollabTask.Api.Migrations
                     b.HasOne("CollabTask.Api.Models.User", "User")
                         .WithMany("WorkspaceMemberships")
                         .HasForeignKey("UserID")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.HasOne("CollabTask.Api.Models.Workspace", "Workspace")
@@ -623,8 +879,6 @@ namespace CollabTask.Api.Migrations
                     b.Navigation("OwnedWorkspaces");
 
                     b.Navigation("TaskAssignments");
-
-                    b.Navigation("TaskWeights");
 
                     b.Navigation("WorkspaceMemberships");
                 });

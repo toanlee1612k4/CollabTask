@@ -1,135 +1,260 @@
 import 'package:flutter/material.dart';
-import 'models.dart';
-import 'sidebar.dart';
-import 'topbar.dart';
-import '../../Image_Picker/screens/members_screen.dart';
-import '../../Image_Picker/screens/tasks_screen.dart';
-import '../../Image_Picker/screens/overview_screen.dart';
-import '../../Image_Picker/screens/progress_screen.dart';
-// Giả sử LoginScreen của bạn nằm ở đây, hãy chỉnh lại đường dẫn nếu cần
-import 'authentications/screens/login_screen.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:provider/provider.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
+import 'package:intl/date_symbol_data_local.dart';
+import 'data/services/api_client.dart';
+import 'data/models/models.dart';
+import 'core/theme/theme_provider.dart';
+import 'presentation/screens/auth/login_screen.dart';
+import 'presentation/layouts/app_layout.dart';
 
-void main() {
-  runApp(const ProjectDashboardApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  // Initialize locale data
+  await initializeDateFormatting('vi_VN', null);
+  Intl.defaultLocale = 'vi_VN';
+  
+  // Initialize API client
+  apiClient.initialize();
+  await apiClient.loadToken();
+  
+  runApp(const CollabTaskApp());
 }
 
-class ProjectDashboardApp extends StatelessWidget {
-  const ProjectDashboardApp({super.key});
+class CollabTaskApp extends StatelessWidget {
+  const CollabTaskApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Project Dashboard',
-      theme: ThemeData(primarySwatch: Colors.indigo, useMaterial3: true),
-      // Bắt đầu ứng dụng với LoginScreen của bạn
-      home: const LoginScreen(),
-      debugShowCheckedModeBanner: false,
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => ThemeProvider()),
+        ChangeNotifierProvider(create: (_) => AuthProvider()),
+        ChangeNotifierProvider(create: (_) => TaskProvider()),
+        ChangeNotifierProvider(create: (_) => WorkspaceProvider()),
+      ],
+      child: Consumer<ThemeProvider>(
+        builder: (context, themeProvider, child) {
+          return MaterialApp(
+            title: 'CollabTask - AI Task Management',
+            debugShowCheckedModeBanner: false,
+            locale: const Locale('vi', 'VN'),
+            supportedLocales: const [
+              Locale('vi', 'VN'),
+              Locale('en', 'US'),
+            ],
+            localizationsDelegates: const [
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            theme: themeProvider.currentTheme,
+            home: const SplashScreen(),
+            routes: {
+              '/login': (context) => const LoginScreen(),
+              '/dashboard': (context) => const AppLayout(initialIndex: 0),
+            },
+          );
+        },
+      ),
     );
   }
 }
 
-// --- ĐỊNH NGHĨA LỚP DASHBOARD SHELL MÀ BẠN ĐANG CẦN ---
-
-class DashboardShell extends StatefulWidget {
-  const DashboardShell({super.key});
+// Splash Screen
+class SplashScreen extends StatefulWidget {
+  const SplashScreen({super.key});
 
   @override
-  State<DashboardShell> createState() => _DashboardShellState();
+  State<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _DashboardShellState extends State<DashboardShell> {
-  int _selectedIndex = 0;
-  late Project project;
-
-  // Khởi tạo dữ liệu mẫu cho ứng dụng
+class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    _initializeData();
+    _checkAuthStatus();
   }
 
-  void _initializeData() {
-    final leader = Member(id: 'm1', name: 'Nguyễn Văn A', role: 'Leader', productivity: 80);
-    final mem2 = Member(id: 'm2', name: 'Trần Thị B', role: 'Member', productivity: 60);
-    final mem3 = Member(id: 'm3', name: 'Lê Văn C', role: 'Member', productivity: 50);
-
-    final tasks = [
-      TaskItem(
-        id: 't1',
-        title: 'Thiết kế UI',
-        description: 'Hoàn thiện mockup, prototype',
-        assignee: mem2,
-        deadline: DateTime.now().add(const Duration(days: 5)),
-        status: 'Todo',
-        progress: 20,
-      ),
-      TaskItem(
-        id: 't2',
-        title: 'Xây dựng API',
-        description: 'Auth & User endpoints',
-        assignee: mem3,
-        deadline: DateTime.now().add(const Duration(days: 10)),
-        status: 'InProgress',
-        progress: 50,
-      ),
-      TaskItem(
-        id: 't3',
-        title: 'Test e2e',
-        description: 'Viết test case cho flows chính',
-        assignee: mem2,
-        deadline: DateTime.now().add(const Duration(days: 15)),
-        status: 'Done',
-        progress: 100,
-      ),
-    ];
-
-    project = Project(
-      name: 'GadHub',
-      description: 'Ứng dụng quản lý cửa hàng thiết bị công nghệ',
-      startDate: DateTime.now().subtract(const Duration(days: 10)),
-      deadline: DateTime.now().add(const Duration(days: 60)),
-      leader: leader,
-      members: [leader, mem2, mem3],
-      tasks: tasks,
-    );
-  }
-
-  void _onNavSelected(int index) {
-    setState(() {
-      _selectedIndex = index;
-    });
-  }
-
-  void _updateState() {
-    setState(() {});
+  Future<void> _checkAuthStatus() async {
+    await Future.delayed(const Duration(seconds: 2));
+    
+    if (apiClient.isAuthenticated) {
+      try {
+        await apiClient.getCurrentUser();
+        if (mounted) {
+          Navigator.of(context).pushReplacementNamed('/dashboard');
+        }
+      } catch (e) {
+        if (mounted) {
+          Navigator.of(context).pushReplacementNamed('/login');
+        }
+      }
+    } else {
+      if (mounted) {
+        Navigator.of(context).pushReplacementNamed('/login');
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final screens = [
-      OverviewScreen(project: project, onUpdate: _updateState),
-      TasksScreen(project: project, onUpdate: _updateState),
-      MembersScreen(project: project, onUpdate: _updateState),
-      ProgressScreen(project: project),
-    ];
-
     return Scaffold(
-      body: SafeArea(
-        child: Row(
-          children: [
-            Sidebar(selectedIndex: _selectedIndex, onTap: _onNavSelected, project: project),
-            Expanded(
-              child: Column(
-                children: [
-                  const Topbar(),
-                  Expanded(child: screens[_selectedIndex]),
-                ],
+      backgroundColor: Colors.indigo.shade600,
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Colors.indigo.shade600,
+              Colors.blue.shade500,
+              Colors.cyan.shade400,
+            ],
+          ),
+        ),
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                child: const Icon(
+                  Icons.psychology,
+                  size: 80,
+                  color: Colors.white,
+                ),
               ),
-            )
-          ],
+              const SizedBox(height: 32),
+              Text(
+                'CollabTask',
+                style: GoogleFonts.inter(
+                  fontSize: 32,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'AI-Powered Task Management',
+                style: GoogleFonts.inter(
+                  fontSize: 16,
+                  color: Colors.white.withOpacity(0.8),
+                ),
+              ),
+              const SizedBox(height: 48),
+              const CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
+// Providers
+class AuthProvider extends ChangeNotifier {
+  bool _isAuthenticated = false;
+  UserModel? _currentUser;
+
+  bool get isAuthenticated => _isAuthenticated;
+  UserModel? get currentUser => _currentUser;
+
+  void setUser(UserModel user) {
+    _currentUser = user;
+    _isAuthenticated = true;
+    notifyListeners();
+  }
+
+  Future<void> loadCurrentUser() async {
+    try {
+      final user = await apiClient.getCurrentUser();
+      setUser(user);
+    } catch (e) {
+      // Handle error
+    }
+  }
+
+  void logout() {
+    _currentUser = null;
+    _isAuthenticated = false;
+    notifyListeners();
+  }
+}
+
+class TaskProvider extends ChangeNotifier {
+  List<TaskModel> _tasks = [];
+  bool _isLoading = false;
+
+  List<TaskModel> get tasks => _tasks;
+  bool get isLoading => _isLoading;
+
+  Future<void> loadTasks() async {
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      // TODO: Implement getTasks() in ApiClient
+      _tasks = [];
+    } catch (e) {
+      // Handle error
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+}
+
+class WorkspaceProvider extends ChangeNotifier {
+  List<WorkspaceModel> _workspaces = [];
+  bool _isLoading = false;
+
+  List<WorkspaceModel> get workspaces => _workspaces;
+  bool get isLoading => _isLoading;
+
+  Future<void> loadWorkspaces() async {
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      final workspacesList = await apiClient.getWorkspaces();
+      
+      // Load member count for each workspace
+      final workspacesWithCounts = await Future.wait(
+        workspacesList.map((workspace) async {
+          try {
+            final members = await apiClient.getWorkspaceMembers(workspace.workspaceId);
+            return WorkspaceModel(
+              workspaceId: workspace.workspaceId,
+              name: workspace.name,
+              description: workspace.description,
+              ownerId: workspace.ownerId,
+              members: members,
+              memberCount: members.length,
+              createdAt: workspace.createdAt,
+            );
+          } catch (e) {
+            // If failed to load members, return original workspace
+            return workspace;
+          }
+        }),
+      );
+      
+      _workspaces = workspacesWithCounts;
+    } catch (e) {
+      // Handle error
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+}

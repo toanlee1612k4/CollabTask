@@ -19,6 +19,11 @@ namespace CollabTask.Api.Models
 
         [MaxLength(512)]
         public string? Link { get; set; }
+        
+        [MaxLength(100)]
+        public string? RelatedEntityType { get; set; }
+        
+        public Guid? RelatedEntityID { get; set; }
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 

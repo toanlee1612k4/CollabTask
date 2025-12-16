@@ -4,7 +4,10 @@ using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using CollabTask.Api.Data;
 using CollabTask.Api.Services.AuthService;
-using CollabTask.Api.Services.PriorityScoringService; // <-- THÊM USING NÀY
+using CollabTask.Api.Services.PriorityScoringService;
+using CollabTask.Api.Services.UserWeightService;
+using CollabTask.Api.Services.DatabaseSeeder;
+using CollabTask.Api.Helpers;
 using Microsoft.OpenApi.Models;
 using Swashbuckle.AspNetCore.Filters;
 using System.Text.Json.Serialization;
@@ -28,11 +31,32 @@ builder.Services.AddSwaggerGen(options => {
         Type = SecuritySchemeType.ApiKey
     });
     options.OperationFilter<SecurityRequirementsOperationFilter>();
+    
+    options.MapType<IFormFile>(() => new OpenApiSchema
+    {
+        Type = "string",
+        Format = "binary"
+    });
+    
+    options.OperationFilter<FileUploadOperationFilter>();
 });
 
-// Add Entity Framework
 builder.Services.AddDbContext<CollabTaskDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+{
+    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"), 
+        sqlOptions =>
+        {
+            sqlOptions.CommandTimeout(30);
+            sqlOptions.EnableRetryOnFailure(maxRetryCount: 3, maxRetryDelay: TimeSpan.FromSeconds(5), errorNumbersToAdd: null);
+        });
+    
+    options.UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking);
+    
+    if (builder.Environment.IsDevelopment())
+    {
+        options.EnableSensitiveDataLogging();
+    }
+});
 
 // Add Authentication
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -44,7 +68,9 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(
                 builder.Configuration.GetSection("AppSettings:Token").Value!)),
             ValidateIssuer = false,
-            ValidateAudience = false
+            ValidateAudience = false,
+            NameClaimType = "unique_name",
+            RoleClaimType = "role"
         };
     });
 
@@ -62,12 +88,22 @@ builder.Services.AddCors(options =>
     });
 });
 
-// Add Memory Cache
-builder.Services.AddMemoryCache(); // <-- THÊM DÒNG NÀY
+builder.Services.AddMemoryCache(options =>
+{
+    options.SizeLimit = 1024;
+});
+
+// Add Response Compression for better performance
+builder.Services.AddResponseCompression(options =>
+{
+    options.EnableForHttps = true;
+});
 
 // Register services
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IPriorityScoringService, PriorityScoringService>(); // <-- Dòng này đã có
+builder.Services.AddScoped<IUserWeightService, UserWeightService>(); // <-- THÊM DÒNG NÀY
+builder.Services.AddScoped<IDatabaseSeeder, DatabaseSeeder>(); // <-- Database Seeder
 
 var app = builder.Build();
 
@@ -82,6 +118,7 @@ else
     app.UseHttpsRedirection();
 }
 
+app.UseResponseCompression();
 app.UseCors("AllowAll");
 
 app.UseAuthentication();
@@ -89,11 +126,38 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-// Ensure database is created
-using (var scope = app.Services.CreateScope())
+// Apply any pending migrations and verify database connection
+try
 {
-    var context = scope.ServiceProvider.GetRequiredService<CollabTaskDbContext>();
-    context.Database.EnsureCreated();
+    using (var scope = app.Services.CreateScope())
+    {
+        var context = scope.ServiceProvider.GetRequiredService<CollabTaskDbContext>();
+        var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+        
+        // Check if database can connect
+        if (await context.Database.CanConnectAsync())
+        {
+            logger.LogInformation("✅ Database connection successful");
+            
+            // Apply pending migrations if any
+            var pendingMigrations = await context.Database.GetPendingMigrationsAsync();
+            if (pendingMigrations.Any())
+            {
+                logger.LogInformation("Applying {Count} pending migrations...", pendingMigrations.Count());
+                await context.Database.MigrateAsync();
+                logger.LogInformation("✅ Migrations applied successfully");
+            }
+        }
+        else
+        {
+            logger.LogWarning("⚠️ Database connection failed - server will start but database operations may fail");
+        }
+    }
+}
+catch (Exception ex)
+{
+    var logger = app.Services.GetRequiredService<ILogger<Program>>();
+    logger.LogError(ex, "❌ Error during database initialization");
 }
 
 app.Run();

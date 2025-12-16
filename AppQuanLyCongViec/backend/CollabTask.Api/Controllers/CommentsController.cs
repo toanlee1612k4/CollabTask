@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CollabTask.Api.Controllers
 {
-    [Route("api/comments")] // Đặt route prefix riêng cho comments
+    [Route("api")] // Fixed route to match /api/tasks/{taskId}/comments
     [ApiController]
     [Authorize]
     public class CommentsController : ControllerBase
@@ -18,6 +18,82 @@ namespace CollabTask.Api.Controllers
         public CommentsController(CollabTaskDbContext context)
         {
             _context = context;
+        }
+
+        // GET /api/tasks/{taskId}/comments
+        [HttpGet("tasks/{taskId}/comments")]
+        public async Task<ActionResult<IEnumerable<CommentDto>>> GetTaskComments(Guid taskId)
+        {
+            var userId = User.GetUserId();
+            if (userId == Guid.Empty) return Unauthorized();
+
+            var task = await _context.Tasks.FindAsync(taskId);
+            if (task == null) return NotFound("Task not found.");
+
+            // Kiểm tra quyền truy cập task
+            var isMember = await _context.WorkspaceMembers
+                .AnyAsync(wm => wm.WorkspaceID == task.WorkspaceID && wm.UserID == userId);
+            if (!isMember) return Forbid();
+
+            var comments = await _context.Comments
+                .Where(c => c.TaskID == taskId)
+                .Include(c => c.User)
+                .OrderBy(c => c.CreatedAt)
+                .Select(c => new CommentDto
+                {
+                    CommentId = c.CommentID,
+                    TaskId = c.TaskID,
+                    UserId = c.UserID,
+                    UserFullName = c.User.FullName ?? c.User.Email,
+                    UserAvatarUrl = c.User.AvatarURL,
+                    Content = c.Content,
+                    CreatedAt = c.CreatedAt
+                })
+                .ToListAsync();
+
+            return Ok(comments);
+        }
+
+        // POST /api/tasks/{taskId}/comments
+        [HttpPost("tasks/{taskId}/comments")]
+        public async Task<ActionResult<CommentDto>> CreateComment(Guid taskId, [FromBody] CreateCommentDto createDto)
+        {
+            var userId = User.GetUserId();
+            if (userId == Guid.Empty) return Unauthorized();
+
+            var task = await _context.Tasks.FindAsync(taskId);
+            if (task == null) return NotFound("Task not found.");
+
+            // Kiểm tra quyền (phải là member của workspace)
+            var isMember = await _context.WorkspaceMembers
+                .AnyAsync(wm => wm.WorkspaceID == task.WorkspaceID && wm.UserID == userId);
+            if (!isMember) return Forbid();
+
+            var newComment = new Comment
+            {
+                CommentID = Guid.NewGuid(),
+                TaskID = taskId,
+                UserID = userId,
+                Content = createDto.Content,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            _context.Comments.Add(newComment);
+            await _context.SaveChangesAsync();
+
+            var user = await _context.Users.FindAsync(userId);
+            var commentDto = new CommentDto
+            {
+                CommentId = newComment.CommentID,
+                TaskId = newComment.TaskID,
+                UserId = newComment.UserID,
+                UserFullName = user?.FullName ?? user?.Email ?? "Unknown",
+                UserAvatarUrl = user?.AvatarURL,
+                Content = newComment.Content,
+                CreatedAt = newComment.CreatedAt
+            };
+
+            return CreatedAtAction(nameof(GetTaskComments), new { taskId }, commentDto);
         }
 
         // PUT /api/comments/{commentId}

@@ -65,6 +65,12 @@ namespace CollabTask.Api.Services.AuthService
             return CreateToken(user);
         }
 
+        // Public method to generate token for external login
+        public string GenerateToken(User user)
+        {
+            return CreateToken(user);
+        }
+
         private string CreateToken(User user)
         {
             var claims = new List<Claim>

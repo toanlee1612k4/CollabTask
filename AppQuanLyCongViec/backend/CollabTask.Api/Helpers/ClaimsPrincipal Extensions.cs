@@ -6,7 +6,11 @@ namespace CollabTask.Api.Helpers
     {
         public static Guid GetUserId(this ClaimsPrincipal user)
         {
-            var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier);
+            // Try standard ClaimTypes first, then try JWT claim name
+            var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier) 
+                           ?? user.FindFirst("nameid")
+                           ?? user.FindFirst("UserID");
+                           
             if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
             {
                 throw new InvalidOperationException("User ID not found in token.");

@@ -8,7 +8,7 @@ import 'package:todolist/data/services/api_client.dart';
 import 'package:todolist/presentation/screens/tasks/enhanced_task_detail_screen.dart';
 import 'package:todolist/presentation/widgets/tasks/create_task_dialog.dart';
 import 'package:todolist/presentation/widgets/workspace/workspace_members_dialog.dart';
-import 'package:todolist/main.dart' show AuthProvider;
+import 'package:todolist/core/providers/legacy_providers.dart';
 
 /// Kanban Board Workspace Screen
 class KanbanWorkspaceScreen extends StatefulWidget {

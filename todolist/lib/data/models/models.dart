@@ -56,15 +56,17 @@ class TaskModel {
       description: json['description'],
       status: json['status'] ?? 'ToDo',
       priority: json['priority'] ?? 'Medium',
-      deadline: json['deadline'] != null ? DateTime.parse(json['deadline']) : null,
+      // Convert UTC to local time when receiving from API
+      deadline: json['deadline'] != null ? DateTime.parse(json['deadline']).toLocal() : null,
       estimatedTimeMinutes: json['estimatedTimeMinutes'],
       priorityScore: (json['priorityScore'] ?? 0.0).toDouble(),
       workspaceId: json['workspaceId']?.toString(),
       assigneeUserIds: (json['assigneeUserIds'] as List<dynamic>?)
           ?.map((id) => id.toString())
           .toList(),
-      createdAt: json['createdAt'] != null ? DateTime.parse(json['createdAt']) : null,
-      updatedAt: json['updatedAt'] != null ? DateTime.parse(json['updatedAt']) : null,
+      // Convert UTC to local time when receiving from API
+      createdAt: json['createdAt'] != null ? DateTime.parse(json['createdAt']).toLocal() : null,
+      updatedAt: json['updatedAt'] != null ? DateTime.parse(json['updatedAt']).toLocal() : null,
     );
   }
 
@@ -75,13 +77,15 @@ class TaskModel {
       'description': description,
       'status': status,
       'priority': priority,
-      'deadline': deadline?.toIso8601String(),
+      // Convert local time to UTC when sending to API
+      'deadline': deadline?.toUtc().toIso8601String(),
       'estimatedTimeMinutes': estimatedTimeMinutes,
       'priorityScore': priorityScore,
       'workspaceId': workspaceId,
       'assigneeUserIds': assigneeUserIds,
-      'createdAt': createdAt?.toIso8601String(),
-      'updatedAt': updatedAt?.toIso8601String(),
+      // Convert local time to UTC when sending to API
+      'createdAt': createdAt?.toUtc().toIso8601String(),
+      'updatedAt': updatedAt?.toUtc().toIso8601String(),
     };
   }
 
@@ -192,7 +196,8 @@ class UserModel {
       email: json['email'] ?? '',
       fullName: json['fullName'],
       avatar: json['avatar'],
-      createdAt: json['createdAt'] != null ? DateTime.parse(json['createdAt']) : null,
+      // Convert UTC to local time
+      createdAt: json['createdAt'] != null ? DateTime.parse(json['createdAt']).toLocal() : null,
       roleName: json['roleName'] ?? json['role'], // Support both field names
     );
   }

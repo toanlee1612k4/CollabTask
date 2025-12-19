@@ -16,6 +16,9 @@ class ApiClient {
   late TaskAssignmentService taskAssignment;
   late WorkspaceRoleService workspaceRole;
   String? _token;
+  
+  // Callback for 401 unauthorized - will be set by AuthProvider
+  void Function()? onUnauthorized;
 
   // Expose Dio instance for custom requests
   Dio get dio => _dio;
@@ -46,7 +49,7 @@ class ApiClient {
     taskAssignment = TaskAssignmentService(_dio);
     workspaceRole = WorkspaceRoleService(_dio);
 
-    // Interceptor để tự động thêm token vào header
+    // Interceptor để tự động thêm token vào header và handle 401
     _dio.interceptors.add(InterceptorsWrapper(
       onRequest: (options, handler) async {
         if (_token != null) {
@@ -57,16 +60,47 @@ class ApiClient {
         }
         handler.next(options);
       },
-      onError: (error, handler) {
+      onResponse: (response, handler) {
+        if (kDebugMode) {
+          print('✅ ${response.statusCode} ${response.requestOptions.path}');
+        }
+        handler.next(response);
+      },
+      onError: (error, handler) async {
         if (kDebugMode) {
           print('❌ Error: ${error.response?.statusCode} ${error.requestOptions.path}');
           if (error.response?.data != null) {
             print('📥 ${error.response?.data}');
           }
         }
+
+        // Handle 401 Unauthorized - Token expired or invalid
+        if (error.response?.statusCode == 401) {
+          if (kDebugMode) {
+            print('🚨 401 Unauthorized - Logging out user');
+            onUnauthorized?.call();
+          }
+          
+          // Clear token immediately
+          await clearToken();
+          
+          // Trigger logout callback if set
+          if (onUnauthorized != null) {
+            onUnauthorized!();
+          }
+        }
+
         handler.next(error);
       },
     ));
+  }
+
+  // Set token directly (used by AuthProvider)
+  Future<void> setToken(String token) async {
+    _token = token;
+    // Also save to SharedPreferences
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('auth_token', token);
   }
 
   // Load token từ SharedPreferences

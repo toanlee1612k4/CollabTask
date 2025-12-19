@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:todolist/main.dart' show WorkspaceProvider;
+import 'package:todolist/core/providers/legacy_providers.dart';
 import 'package:todolist/data/models/models.dart';
 import 'package:todolist/data/services/api_client.dart';
 import 'package:todolist/presentation/screens/workspace/kanban_workspace_screen.dart';

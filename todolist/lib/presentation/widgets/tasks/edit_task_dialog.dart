@@ -90,7 +90,8 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
         'title': _titleController.text.trim(),
         'description': _descriptionController.text.trim(),
         'priority': _selectedPriority,
-        if (_selectedDeadline != null) 'deadline': _selectedDeadline!.toIso8601String(),
+        // Convert local time to UTC before sending to API
+        if (_selectedDeadline != null) 'deadline': _selectedDeadline!.toUtc().toIso8601String(),
         if (estimatedHours != null) 'estimatedTimeMinutes': estimatedHours * 60,
       };
 

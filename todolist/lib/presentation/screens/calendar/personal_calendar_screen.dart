@@ -6,7 +6,7 @@ import 'package:todolist/data/models/models.dart';
 import 'package:todolist/data/services/api_client.dart';
 import 'package:todolist/presentation/widgets/workspace/task_calendar_view.dart';
 import 'package:todolist/presentation/screens/tasks/enhanced_task_detail_screen.dart';
-import 'package:todolist/main.dart' show AuthProvider;
+import 'package:todolist/core/providers/legacy_providers.dart';
 
 /// Personal Calendar Screen - Hiển thị lịch task cá nhân của user
 class PersonalCalendarScreen extends StatefulWidget {

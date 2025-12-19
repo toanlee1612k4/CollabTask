@@ -6,7 +6,7 @@ import 'package:todolist/data/models/models.dart';
 import 'package:todolist/data/services/api_client.dart';
 import 'package:todolist/presentation/screens/tasks/enhanced_task_detail_screen.dart';
 import 'package:todolist/presentation/screens/workspace/kanban_workspace_screen.dart';
-import 'package:todolist/main.dart' show AuthProvider;
+import 'package:todolist/core/providers/legacy_providers.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});

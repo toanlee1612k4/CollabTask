@@ -27,15 +27,18 @@ namespace CollabTask.Api.Controllers
             var userId = User.GetUserId();
             if (userId == Guid.Empty) return Unauthorized();
 
-            var task = await _context.Tasks.FindAsync(taskId);
+            var task = await _context.Tasks.AsNoTracking().FirstOrDefaultAsync(t => t.TaskID == taskId);
             if (task == null) return NotFound("Task not found.");
 
             // Kiểm tra quyền truy cập task
             var isMember = await _context.WorkspaceMembers
+                .AsNoTracking()
                 .AnyAsync(wm => wm.WorkspaceID == task.WorkspaceID && wm.UserID == userId);
             if (!isMember) return Forbid();
 
+            // ⚡ PERFORMANCE: AsNoTracking() for read-only query
             var comments = await _context.Comments
+                .AsNoTracking()
                 .Where(c => c.TaskID == taskId)
                 .Include(c => c.User)
                 .OrderBy(c => c.CreatedAt)
@@ -61,11 +64,12 @@ namespace CollabTask.Api.Controllers
             var userId = User.GetUserId();
             if (userId == Guid.Empty) return Unauthorized();
 
-            var task = await _context.Tasks.FindAsync(taskId);
+            var task = await _context.Tasks.AsNoTracking().FirstOrDefaultAsync(t => t.TaskID == taskId);
             if (task == null) return NotFound("Task not found.");
 
             // Kiểm tra quyền (phải là member của workspace)
             var isMember = await _context.WorkspaceMembers
+                .AsNoTracking()
                 .AnyAsync(wm => wm.WorkspaceID == task.WorkspaceID && wm.UserID == userId);
             if (!isMember) return Forbid();
 

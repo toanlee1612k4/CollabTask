@@ -29,7 +29,9 @@ namespace CollabTask.Api.Controllers
             {
                 var userId = User.GetUserId(); // Lấy UserId từ token
 
+            // ⚡ PERFORMANCE: AsNoTracking() for read-only query
             var workspaces = await _context.WorkspaceMembers
+                .AsNoTracking()
                 .Where(wm => wm.UserID == userId)
                 .Include(wm => wm.Workspace)
                 .Select(wm => new WorkspaceDto
@@ -113,11 +115,12 @@ namespace CollabTask.Api.Controllers
 
             // Kiểm tra user có phải member không
             var isMember = await _context.WorkspaceMembers
+                .AsNoTracking()
                 .AnyAsync(wm => wm.WorkspaceID == id && wm.UserID == userId);
 
             if (!isMember) return Forbid();
 
-            var workspace = await _context.Workspaces.FindAsync(id);
+            var workspace = await _context.Workspaces.AsNoTracking().FirstOrDefaultAsync(w => w.WorkspaceID == id);
             if (workspace == null) return NotFound();
 
             var workspaceDto = new WorkspaceDto
@@ -188,11 +191,14 @@ namespace CollabTask.Api.Controllers
 
             // Kiểm tra user có phải member không
             var isMember = await _context.WorkspaceMembers
+                .AsNoTracking()
                 .AnyAsync(wm => wm.WorkspaceID == id && wm.UserID == userId);
 
             if (!isMember) return Forbid();
 
+            // ⚡ PERFORMANCE: AsNoTracking() for read-only query
             var members = await _context.WorkspaceMembers
+                .AsNoTracking()
                 .Where(wm => wm.WorkspaceID == id)
                 .Include(wm => wm.User)
                 .Select(wm => new MemberDto

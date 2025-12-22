@@ -47,19 +47,49 @@ namespace CollabTask.Api.Controllers
             [FromQuery] string? priority = null)
         {
             var userId = User.GetUserId();
-            var isMember = await _context.WorkspaceMembers
-                .AnyAsync(wm => wm.WorkspaceID == workspaceId && wm.UserID == userId);
+            if (userId == Guid.Empty) return Unauthorized(new { message = "Invalid user token" });
 
-            if (!isMember) return Forbid();
+            // 🔒 SECURITY: Check membership AND get role
+            var member = await _context.WorkspaceMembers
+                .AsNoTracking()
+                .FirstOrDefaultAsync(wm => wm.WorkspaceID == workspaceId && wm.UserID == userId);
+
+            if (member == null) return Forbid();
 
             // Validate pagination parameters
             if (page < 1) page = 1;
             if (pageSize < 1) pageSize = 50;
             if (pageSize > 100) pageSize = 100; // Max 100 items per page
 
-            var query = _context.Tasks
+            // 🔒 SECURITY: Check if user is Owner/ProjectManager
+            var workspace = await _context.Workspaces
                 .AsNoTracking()
-                .Where(t => t.WorkspaceID == workspaceId);
+                .FirstOrDefaultAsync(w => w.WorkspaceID == workspaceId);
+
+            bool isOwnerOrPM = workspace != null && 
+                              (workspace.OwnerUserID == userId || 
+                               member.Role == "Owner" || 
+                               member.Role == "ProjectManager");
+
+            IQueryable<Task> query;
+
+            if (isOwnerOrPM)
+            {
+                // ✅ Owner/PM: See ALL tasks in workspace
+                query = _context.Tasks
+                    .AsNoTracking()
+                    .Where(t => t.WorkspaceID == workspaceId);
+            }
+            else
+            {
+                // ✅ Member: Only see tasks ASSIGNED to them (SECURITY FIX)
+                query = _context.TaskAssignments
+                    .AsNoTracking()
+                    .Where(ta => ta.AssigneeUserID == userId)
+                    .Select(ta => ta.Task)
+                    .Where(t => t.WorkspaceID == workspaceId)
+                    .Distinct();
+            }
 
             // Apply filters
             if (!string.IsNullOrEmpty(status))
@@ -71,7 +101,7 @@ namespace CollabTask.Api.Controllers
             // Get total count before pagination
             var totalCount = await query.CountAsync();
 
-            // Apply pagination and load related data
+            // ⚡ PERFORMANCE: Use projection (.Select) to avoid loading full entities
             var tasks = await query
                 .Include(t => t.TaskAssignments)
                 .OrderByDescending(t => t.CreatedAt)
@@ -117,8 +147,10 @@ namespace CollabTask.Api.Controllers
                 var start = startDate ?? DateTime.UtcNow.Date;
                 var end = endDate ?? DateTime.UtcNow.Date.AddDays(30);
 
-                // Chỉ lấy tasks được assign cho user
+                // ✅ Chỉ lấy tasks được assign cho user (SECURE)
+                // ⚡ PERFORMANCE: Add AsNoTracking()
                 var calendarTasks = await _context.TaskAssignments
+                    .AsNoTracking()
                     .Where(ta => ta.AssigneeUserID == userId
                         && ta.Task.Deadline.HasValue
                         && ta.Task.Deadline >= start
@@ -227,17 +259,42 @@ namespace CollabTask.Api.Controllers
         public async Task<ActionResult<TaskDto>> GetTaskById(Guid id)
         {
             var userId = User.GetUserId();
-            if (userId == Guid.Empty) return Unauthorized();
+            if (userId == Guid.Empty) return Unauthorized(new { message = "Invalid user token" });
 
+            // ⚡ PERFORMANCE: Use AsNoTracking for read-only query
             var task = await _context.Tasks
+                .AsNoTracking()
                 .Include(t => t.TaskAssignments)
                 .FirstOrDefaultAsync(t => t.TaskID == id);
 
-            if (task == null) return NotFound();
+            if (task == null) return NotFound(new { message = "Task not found" });
 
-            var isMember = await _context.WorkspaceMembers
-                .AnyAsync(wm => wm.WorkspaceID == task.WorkspaceID && wm.UserID == userId);
-            if (!isMember) return Forbid();
+            // 🔒 SECURITY: Check membership AND role
+            var member = await _context.WorkspaceMembers
+                .AsNoTracking()
+                .FirstOrDefaultAsync(wm => wm.WorkspaceID == task.WorkspaceID && wm.UserID == userId);
+            
+            if (member == null) return Forbid();
+
+            // 🔒 SECURITY: Check if user has permission to view this specific task
+            var workspace = await _context.Workspaces
+                .AsNoTracking()
+                .FirstOrDefaultAsync(w => w.WorkspaceID == task.WorkspaceID);
+
+            bool isOwnerOrPM = workspace != null && 
+                              (workspace.OwnerUserID == userId || 
+                               member.Role == "Owner" || 
+                               member.Role == "ProjectManager");
+
+            // ✅ If Member role, check if assigned to this task (SECURITY FIX)
+            if (!isOwnerOrPM)
+            {
+                bool isAssigned = task.TaskAssignments.Any(ta => ta.AssigneeUserID == userId);
+                if (!isAssigned)
+                {
+                    return Forbid("Members can only view tasks assigned to them");
+                }
+            }
 
             var taskDto = new TaskDto
             {

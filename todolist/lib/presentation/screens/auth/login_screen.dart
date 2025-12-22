@@ -5,9 +5,10 @@ import 'package:todolist/presentation/widgets/common/social_login_button.dart';
 import 'package:todolist/presentation/widgets/common/primary_button.dart';
 import 'package:todolist/presentation/screens/auth/register_screen.dart';
 import 'package:todolist/presentation/screens/auth/forgot_password_screen.dart';
-import 'package:todolist/data/services/api_client.dart';
+// import 'package:todolist/data/services/api_client.dart'; // Không cần import trực tiếp nếu dùng provider
 import 'package:todolist/data/services/oauth_service.dart';
 import 'package:todolist/providers/auth_provider.dart';
+import '../../layouts/app_layout.dart'; // Import màn hình Dashboard
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -38,24 +39,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     }
 
     // Use AuthProvider to login
-    final authNotifier = ref.read(authProvider.notifier);
-    final success = await authNotifier.login(
+    // UI loading sẽ tự động cập nhật nhờ ref.watch trong build
+    await ref.read(authProvider.notifier).login(
       emailController.text.trim(),
       passwordController.text,
     );
-
-    if (!mounted) return;
-
-    if (!success) {
-      // Error message will be shown by listening to authProvider state
-      final errorMessage = ref.read(authProvider).errorMessage;
-      if (errorMessage != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Đăng nhập thất bại: $errorMessage')),
-        );
-      }
-    }
-    // Navigation will be handled automatically by SplashScreen's ref.listen
+    
+    // Lưu ý: Không cần check success hay navigation ở đây nữa
+    // ref.listen trong hàm build sẽ lo việc đó.
   }
 
   Future<void> _handleGoogleLogin() async {
@@ -69,7 +60,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         final authNotifier = ref.read(authProvider.notifier);
         await authNotifier.login(
           result['email'] ?? '', 
-          '', // Google login doesn't need password
+          '', // Google login doesn't need password, backend handles logic
         );
 
         if (result['isNewUser']) {
@@ -122,6 +113,28 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // 🔥 QUAN TRỌNG: Thêm logic lắng nghe trạng thái Auth để điều hướng
+    ref.listen<AuthState>(authProvider, (previous, next) {
+      if (next.status == AuthStatus.authenticated) {
+        // Điều hướng khi login thành công
+        if (mounted) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const AppLayout(initialIndex: 0)),
+          );
+        }
+      } else if (next.status == AuthStatus.failure) {
+        // Hiện lỗi khi login thất bại
+        if (next.errorMessage != null && mounted) {
+           ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(next.errorMessage!),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    });
+
     // Watch auth state for loading status
     final authState = ref.watch(authProvider);
     final isLoading = authState.status == AuthStatus.loading;
@@ -170,7 +183,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    if (authState.errorMessage != null)
+                    // Hiển thị error message trực tiếp trên UI nếu muốn (ngoài SnackBar)
+                    if (authState.errorMessage != null && authState.status == AuthStatus.unauthenticated)
                       Padding(
                         padding: const EdgeInsets.only(bottom: 16),
                         child: Text(
@@ -179,12 +193,19 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           textAlign: TextAlign.center,
                         ),
                       ),
+                    
+                    // Nút đăng nhập
                     PrimaryButton(
                       text: isLoading ? 'Đang đăng nhập...' : 'Đăng nhập',
-                      onPressed: isLoading ? (){} : () {
-                        _handleLogin();
+                      // Fix: PrimaryButton requires a non-nullable VoidCallback.
+                      // Instead of passing null, we pass a function that does nothing if loading.
+                      onPressed: () {
+                        if (!isLoading) {
+                          _handleLogin();
+                        }
                       },
                     ),
+                    
                     const SizedBox(height: 16),
                     const Text(
                       'Hoặc đăng nhập bằng',

@@ -58,28 +58,30 @@ class _WorkspaceInvitationsScreenState extends State<WorkspaceInvitationsScreen>
       // Accept invitation using new backend endpoint
       final result = await _apiClient.acceptWorkspaceInvitation(invitationId);
 
-      if (mounted) {
-        final workspaceName = result['workspace']?['name'] ?? 'workspace';
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Đã tham gia $workspaceName! Xem trong Workspaces.'),
-            backgroundColor: Colors.green,
-            duration: const Duration(seconds: 3),
-          ),
-        );
-        
-        // Reload invitation list to remove accepted invitation
-        await _loadInvitations();
-      }
+      // CRITICAL FIX: Check mounted AFTER await before using context
+      if (!mounted) return;
+      
+      final workspaceName = result['workspace']?['name'] ?? 'workspace';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Đã tham gia $workspaceName! Xem trong Workspaces.'),
+          backgroundColor: Colors.green,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+      
+      // Reload invitation list to remove accepted invitation
+      await _loadInvitations();
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Lỗi khi chấp nhận lời mời: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      // CRITICAL FIX: Check mounted AFTER await before using context
+      if (!mounted) return;
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Lỗi khi chấp nhận lời mời: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
@@ -91,27 +93,29 @@ class _WorkspaceInvitationsScreenState extends State<WorkspaceInvitationsScreen>
       // Reject invitation using new backend endpoint
       await _apiClient.rejectWorkspaceInvitation(invitationId);
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Đã từ chối lời mời'),
-            backgroundColor: Colors.orange,
-            duration: Duration(seconds: 2),
-          ),
-        );
-        
-        // Reload lại danh sách
-        _loadInvitations();
-      }
+      // CRITICAL FIX: Check mounted AFTER await before using context
+      if (!mounted) return;
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Đã từ chối lời mời'),
+          backgroundColor: Colors.orange,
+          duration: Duration(seconds: 2),
+        ),
+      );
+      
+      // Reload lại danh sách
+      await _loadInvitations();
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Lỗi khi từ chối lời mời: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      // CRITICAL FIX: Check mounted AFTER await before using context
+      if (!mounted) return;
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Lỗi khi từ chối lời mời: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 

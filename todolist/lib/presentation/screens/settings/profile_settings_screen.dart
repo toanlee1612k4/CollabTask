@@ -1,124 +1,156 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:provider/provider.dart' as legacy_provider;
 import 'package:google_fonts/google_fonts.dart';
 import 'package:todolist/core/constants/app_design_system.dart';
 import 'package:todolist/core/theme/theme_provider.dart';
 import 'package:todolist/data/models/models.dart';
 import 'package:todolist/data/services/api_client.dart';
+import 'package:todolist/providers/auth_provider.dart';
+import 'package:todolist/main.dart';
 
-/// Profile Settings Screen
-class ProfileSettingsScreen extends StatefulWidget {
+// ==================== PROFILE STATE ====================
+
+class ProfileState {
+  final UserModel? user;
+  final Map<String, dynamic>? stats;
+  final bool isLoading;
+  final String? error;
+
+  const ProfileState({
+    this.user,
+    this.stats,
+    this.isLoading = false,
+    this.error,
+  });
+
+  ProfileState copyWith({
+    UserModel? user,
+    Map<String, dynamic>? stats,
+    bool? isLoading,
+    String? error,
+  }) {
+    return ProfileState(
+      user: user ?? this.user,
+      stats: stats ?? this.stats,
+      isLoading: isLoading ?? this.isLoading,
+      error: error,
+    );
+  }
+}
+
+// ==================== PROFILE NOTIFIER ====================
+
+class ProfileNotifier extends StateNotifier<ProfileState> {
+  final ApiClient _apiClient;
+
+  ProfileNotifier(this._apiClient) : super(const ProfileState()) {
+    loadProfile();
+  }
+
+  Future<void> loadProfile() async {
+    state = state.copyWith(isLoading: true, error: null);
+
+    try {
+      // Load user profile
+      final user = await _apiClient.getCurrentUser();
+      
+      // Load stats in parallel
+      final productivityStats = await _apiClient.getUserStats();
+      final workspaces = await _apiClient.getWorkspaces();
+      final myTasksResult = await _apiClient.getMyTasks(page: 1, pageSize: 1);
+      
+      final stats = {
+        'totalTasksCompleted': productivityStats['totalTasksCompleted'] ?? 0,
+        'onTimeCompletionRate': productivityStats['onTimeCompletionRate'] ?? 0.0,
+        'currentStreak': productivityStats['currentStreak'] ?? 0,
+        'totalTasks': myTasksResult.totalCount,
+        'totalWorkspaces': workspaces.length,
+        'ownedWorkspaces': workspaces.where((w) => w.ownerId == user.userId).length,
+        'memberWorkspaces': workspaces.where((w) => w.ownerId != user.userId).length,
+      };
+
+      state = ProfileState(
+        user: user,
+        stats: stats,
+        isLoading: false,
+        error: null,
+      );
+    } catch (e) {
+      state = state.copyWith(
+        isLoading: false,
+        error: e.toString(),
+      );
+    }
+  }
+
+  Future<void> refresh() async {
+    await loadProfile();
+  }
+}
+
+// ==================== PROVIDER ====================
+
+final profileProvider = StateNotifierProvider<ProfileNotifier, ProfileState>((ref) {
+  return ProfileNotifier(apiClient);
+});
+
+// ==================== SCREEN ====================
+
+/// Profile Settings Screen - Riverpod version
+class ProfileSettingsScreen extends ConsumerStatefulWidget {
   const ProfileSettingsScreen({super.key});
 
   @override
-  State<ProfileSettingsScreen> createState() => _ProfileSettingsScreenState();
+  ConsumerState<ProfileSettingsScreen> createState() => _ProfileSettingsScreenState();
 }
 
-class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
-  final ApiClient _apiClient = ApiClient();
-  UserModel? _currentUser;
-  Map<String, dynamic>? _userStats;
-  bool _isLoading = true;
-  String? _error;
+class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
   bool _notificationsEnabled = true;
   String _selectedLanguage = 'Tiếng Việt';
 
   @override
   void initState() {
     super.initState();
-    _loadProfile();
-    _loadUserStats();
-  }
-
-  Future<void> _loadProfile() async {
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
-
-    try {
-      final user = await _apiClient.getCurrentUser();
-      if (mounted) {
-        setState(() {
-          _currentUser = user;
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _error = e.toString();
-          _isLoading = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _loadUserStats() async {
-    try {
-      // Load both productivity stats and workspace/task counts
-      final productivityStats = await _apiClient.getUserStats();
-      final workspaces = await _apiClient.getWorkspaces();
-      final myTasksResult = await _apiClient.getMyTasks(page: 1, pageSize: 1); // Just get totalCount
-      
-      // Get current user ID to determine ownership
-      final currentUser = await _apiClient.getCurrentUser();
-      
-      if (mounted) {
-        setState(() {
-          _userStats = {
-            // Productivity stats
-            'totalTasksCompleted': productivityStats['totalTasksCompleted'] ?? 0,
-            'onTimeCompletionRate': productivityStats['onTimeCompletionRate'] ?? 0.0,
-            'currentStreak': productivityStats['currentStreak'] ?? 0,
-            
-            // Workspace/task counts
-            'totalTasks': myTasksResult.totalCount,
-            'totalWorkspaces': workspaces.length,
-            'ownedWorkspaces': workspaces.where((w) => w.ownerId == currentUser.userId).length,
-            'memberWorkspaces': workspaces.where((w) => w.ownerId != currentUser.userId).length,
-          };
-        });
-      }
-    } catch (e) {
-      print('⚠️ Could not load user stats: $e');
-      // Set default values to prevent null errors
-      if (mounted) {
-        setState(() {
-          _userStats = {
-            'totalTasksCompleted': 0,
-            'onTimeCompletionRate': 0.0,
-            'currentStreak': 0,
-            'totalTasks': 0,
-            'totalWorkspaces': 0,
-            'ownedWorkspaces': 0,
-            'memberWorkspaces': 0,
-          };
-        });
-      }
-    }
+    // Trigger profile load on init
+    Future.microtask(() => ref.read(profileProvider.notifier).loadProfile());
   }
 
   @override
   Widget build(BuildContext context) {
+    final profileState = ref.watch(profileProvider);
+    final authState = ref.watch(authProvider);
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: CustomScrollView(
         slivers: [
           _buildAppBar(),
-          if (_isLoading)
+          if (profileState.isLoading && profileState.user == null)
             const SliverFillRemaining(
               child: Center(child: CircularProgressIndicator()),
             )
-          else if (_error != null)
+          else if (profileState.error != null && profileState.user == null)
             SliverFillRemaining(
               child: Center(
-                child: Text('Error: $_error'),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.error_outline, size: 64, color: Colors.red),
+                    const SizedBox(height: 16),
+                    Text('Error: ${profileState.error}'),
+                    const SizedBox(height: 16),
+                    ElevatedButton(
+                      onPressed: () => ref.read(profileProvider.notifier).refresh(),
+                      child: const Text('Thử lại'),
+                    ),
+                  ],
+                ),
               ),
             )
-          else if (_currentUser != null) ...[
-            SliverToBoxAdapter(child: _buildProfileHeader()),
-            SliverToBoxAdapter(child: _buildProfileInfo()),
+          else if (profileState.user != null) ...[
+            SliverToBoxAdapter(child: _buildProfileHeader(profileState)),
+            SliverToBoxAdapter(child: _buildProfileInfo(profileState)),
             SliverToBoxAdapter(child: _buildPreferences()),
             SliverToBoxAdapter(child: _buildDangerZone()),
           ],
@@ -147,7 +179,10 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
       actions: [
         IconButton(
           onPressed: () {
-            // Edit profile
+            // Edit profile (TODO: Navigate to edit screen)
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Chức năng đang phát triển')),
+            );
           },
           icon: const Icon(Icons.edit),
           tooltip: 'Edit Profile',
@@ -156,7 +191,9 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
     );
   }
 
-  Widget _buildProfileHeader() {
+  Widget _buildProfileHeader(ProfileState profileState) {
+    final user = profileState.user!;
+    
     return Container(
       padding: const EdgeInsets.all(AppSpacing.lg),
       child: Column(
@@ -167,7 +204,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
                 radius: 60,
                 backgroundColor: AppColors.primary.withOpacity(0.1),
                 child: Text(
-                  (_currentUser!.fullName ?? 'U').substring(0, (_currentUser!.fullName?.length ?? 1) > 1 ? 2 : 1).toUpperCase(),
+                  (user.fullName ?? 'U').substring(0, (user.fullName?.length ?? 1) > 1 ? 2 : 1).toUpperCase(),
                   style: GoogleFonts.inter(
                     fontSize: 36,
                     fontWeight: FontWeight.w700,
@@ -196,7 +233,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
           ),
           const SizedBox(height: AppSpacing.md),
           Text(
-            _currentUser!.fullName ?? 'User',
+            user.fullName ?? 'User',
             style: GoogleFonts.inter(
               fontSize: AppTypography.headlineMedium,
               fontWeight: FontWeight.w700,
@@ -204,7 +241,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
             ),
           ),
           Text(
-            _currentUser!.email,
+            user.email,
             style: GoogleFonts.inter(
               fontSize: AppTypography.bodyMedium,
               color: AppColors.textSecondary,
@@ -253,7 +290,9 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
     );
   }
 
-  Widget _buildProfileInfo() {
+  Widget _buildProfileInfo(ProfileState profileState) {
+    final stats = profileState.stats ?? {};
+    
     return Card(
       margin: const EdgeInsets.all(AppSpacing.md),
       elevation: AppElevation.low,
@@ -276,13 +315,13 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
             const SizedBox(height: AppSpacing.md),
             
             // Stats Grid
-            if (_userStats != null) ...[
+            if (stats.isNotEmpty) ...[
               Row(
                 children: [
                   Expanded(
                     child: _buildStatCard(
                       icon: Icons.task_alt,
-                      value: (_userStats!['totalTasks'] ?? 0).toString(),
+                      value: (stats['totalTasks'] ?? 0).toString(),
                       label: 'Total Tasks',
                       color: AppColors.primary,
                     ),
@@ -291,7 +330,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
                   Expanded(
                     child: _buildStatCard(
                       icon: Icons.check_circle,
-                      value: (_userStats!['totalTasksCompleted'] ?? 0).toString(),
+                      value: (stats['totalTasksCompleted'] ?? 0).toString(),
                       label: 'Completed',
                       color: AppColors.success,
                     ),
@@ -304,7 +343,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
                   Expanded(
                     child: _buildStatCard(
                       icon: Icons.workspaces,
-                      value: (_userStats!['totalWorkspaces'] ?? 0).toString(),
+                      value: (stats['totalWorkspaces'] ?? 0).toString(),
                       label: 'Workspaces',
                       color: AppColors.info,
                     ),
@@ -313,7 +352,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
                   Expanded(
                     child: _buildStatCard(
                       icon: Icons.star,
-                      value: (_userStats!['ownedWorkspaces'] ?? 0).toString(),
+                      value: (stats['ownedWorkspaces'] ?? 0).toString(),
                       label: 'Owner',
                       color: AppColors.warning,
                     ),
@@ -326,7 +365,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
                   Expanded(
                     child: _buildStatCard(
                       icon: Icons.timer,
-                      value: '${(_userStats!['onTimeCompletionRate'] ?? 0).toInt()}%',
+                      value: '${(stats['onTimeCompletionRate'] ?? 0).toInt()}%',
                       label: 'On-Time Rate',
                       color: AppColors.success,
                     ),
@@ -335,7 +374,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
                   Expanded(
                     child: _buildStatCard(
                       icon: Icons.local_fire_department,
-                      value: (_userStats!['currentStreak'] ?? 0).toString(),
+                      value: (stats['currentStreak'] ?? 0).toString(),
                       label: 'Day Streak',
                       color: Colors.orange,
                     ),
@@ -358,13 +397,13 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
               ),
             ),
             const SizedBox(height: AppSpacing.md),
-            _buildInfoRow('Full Name', _currentUser!.fullName ?? 'N/A', Icons.person_rounded),
-            _buildInfoRow('Email', _currentUser!.email, Icons.email_rounded),
-            _buildInfoRow('User ID', _currentUser!.userId, Icons.fingerprint_rounded),
+            _buildInfoRow('Full Name', profileState.user!.fullName ?? 'N/A', Icons.person_rounded),
+            _buildInfoRow('Email', profileState.user!.email, Icons.email_rounded),
+            _buildInfoRow('User ID', profileState.user!.userId, Icons.fingerprint_rounded),
             _buildInfoRow(
               'Member Since',
-              _currentUser!.createdAt != null 
-                ? '${_currentUser!.createdAt!.day}/${_currentUser!.createdAt!.month}/${_currentUser!.createdAt!.year}'
+              profileState.user!.createdAt != null 
+                ? '${profileState.user!.createdAt!.day}/${profileState.user!.createdAt!.month}/${profileState.user!.createdAt!.year}'
                 : 'N/A',
               Icons.calendar_today_rounded,
             ),
@@ -447,7 +486,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
             leading: Icon(Icons.dark_mode_rounded, color: AppColors.primary),
             title: const Text('Dark Mode'),
             subtitle: const Text('Chuyển sang chế độ tối'),
-            trailing: Consumer<ThemeProvider>(
+            trailing: legacy_provider.Consumer<ThemeProvider>(
               builder: (context, themeProvider, child) {
                 return Switch(
                   value: themeProvider.isDarkMode,
@@ -580,7 +619,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
     );
 
     if (confirm == true && mounted) {
-      await _apiClient.logout();
+      await apiClient.logout();
       if (mounted) {
         Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
       }

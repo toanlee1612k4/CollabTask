@@ -9,6 +9,7 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'data/services/api_client.dart';
 import 'providers/auth_provider.dart';
 import 'core/providers/legacy_providers.dart';
+import 'core/theme/theme_provider.dart';
 import 'presentation/screens/splash_screen.dart';
 
 void main() async {
@@ -53,37 +54,44 @@ class CollabTaskApp extends StatelessWidget {
         legacy_provider.ChangeNotifierProvider(create: (_) => AuthProvider()),
         legacy_provider.ChangeNotifierProvider(create: (_) => TaskProvider()),
         legacy_provider.ChangeNotifierProvider(create: (_) => WorkspaceProvider()),
+        legacy_provider.ChangeNotifierProvider(create: (_) => ThemeProvider()),
       ],
-      child: MaterialApp(
-        title: 'CollabTask - AI Task Management',
-        debugShowCheckedModeBanner: false,
-        locale: const Locale('vi', 'VN'),
-        supportedLocales: const [
-          Locale('vi', 'VN'),
-          Locale('en', 'US'),
-        ],
-        localizationsDelegates: const [
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
-        ],
-        theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(
-            seedColor: const Color(0xFF6C63FF),
-            brightness: Brightness.light,
-          ),
-          textTheme: GoogleFonts.interTextTheme(),
-          useMaterial3: true,
-        ),
-        darkTheme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(
-            seedColor: const Color(0xFF6C63FF),
-            brightness: Brightness.dark,
-          ),
-          textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme),
-          useMaterial3: true,
-        ),
-        home: const SplashScreen(),
+      child: legacy_provider.Consumer<ThemeProvider>(
+        builder: (context, themeProvider, child) {
+          return MaterialApp(
+            title: 'CollabTask - AI Task Management',
+            debugShowCheckedModeBanner: false,
+            locale: const Locale('vi', 'VN'),
+            supportedLocales: const [
+              Locale('vi', 'VN'),
+              Locale('en', 'US'),
+            ],
+            localizationsDelegates: const [
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            // ✅ Sử dụng theme từ ThemeProvider để dark mode hoạt động
+            theme: ThemeData(
+              colorScheme: ColorScheme.fromSeed(
+                seedColor: const Color(0xFF6C63FF),
+                brightness: Brightness.light,
+              ),
+              textTheme: GoogleFonts.interTextTheme(),
+              useMaterial3: true,
+            ),
+            darkTheme: ThemeData(
+              colorScheme: ColorScheme.fromSeed(
+                seedColor: const Color(0xFF6C63FF),
+                brightness: Brightness.dark,
+              ),
+              textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme),
+              useMaterial3: true,
+            ),
+            themeMode: themeProvider.isDarkMode ? ThemeMode.dark : ThemeMode.light,
+            home: const SplashScreen(),
+          );
+        },
       ),
     );
   }

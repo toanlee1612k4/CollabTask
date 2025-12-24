@@ -34,6 +34,7 @@ namespace CollabTask.Api.Controllers
 
                 // Check if user has access to this task
                 var task = await _context.Tasks
+                    .AsNoTracking()
                     .Include(t => t.Workspace)
                     .ThenInclude(w => w.Members)
                     .FirstOrDefaultAsync(t => t.TaskID == taskId);
@@ -45,7 +46,9 @@ namespace CollabTask.Api.Controllers
                 if (!isMember)
                     return Forbid();
 
+                // ⚡ PERFORMANCE: AsNoTracking() for read-only query
                 var attachments = await _context.TaskAttachments
+                    .AsNoTracking()
                     .Where(a => a.TaskID == taskId)
                     .Include(a => a.UploadedBy)
                     .OrderByDescending(a => a.UploadedAt)

@@ -766,34 +766,36 @@ class _AddMemberDialogState extends State<AddMemberDialog> {
         message: 'Mời bạn tham gia làm việc cùng team!',
       );
       
-      if (mounted) {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('✅ Đã gửi lời mời tới $email!\nUser sẽ nhận được thông báo và có thể chấp nhận lời mời.'),
-            backgroundColor: AppColors.success,
-            duration: const Duration(seconds: 3),
-          ),
-        );
-      }
+      // CRITICAL FIX: Check mounted AFTER await before using context/Navigator
+      if (!mounted) return;
+      
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('✅ Đã gửi lời mời tới $email!\nUser sẽ nhận được thông báo và có thể chấp nhận lời mời.'),
+          backgroundColor: AppColors.success,
+          duration: const Duration(seconds: 3),
+        ),
+      );
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          // Parse error message for user-friendly display
-          String errorMsg = e.toString();
-          if (errorMsg.contains('does not exist') || errorMsg.contains('not found')) {
-            errorMsg = '❌ Email này chưa đăng ký tài khoản.\nVui lòng yêu cầu user đăng ký trước khi gửi lời mời.';
-          } else if (errorMsg.contains('already a member')) {
-            errorMsg = '⚠️ User đã là thành viên của workspace này rồi.';
-          } else if (errorMsg.contains('already has a pending invitation')) {
-            errorMsg = '⚠️ Đã có lời mời đang chờ duyệt cho email này.';
-          } else if (errorMsg.contains('Only Owner or ProjectManager') || errorMsg.contains('permission')) {
-            errorMsg = '🚫 Chỉ Owner hoặc Project Manager mới có quyền gửi lời mời.';
-          }
-          _error = errorMsg;
-          _isLoading = false;
-        });
-      }
+      // CRITICAL FIX: Check mounted AFTER await before using context/setState
+      if (!mounted) return;
+      
+      setState(() {
+        // Parse error message for user-friendly display
+        String errorMsg = e.toString();
+        if (errorMsg.contains('does not exist') || errorMsg.contains('not found')) {
+          errorMsg = '❌ Email này chưa đăng ký tài khoản.\nVui lòng yêu cầu user đăng ký trước khi gửi lời mời.';
+        } else if (errorMsg.contains('already a member')) {
+          errorMsg = '⚠️ User đã là thành viên của workspace này rồi.';
+        } else if (errorMsg.contains('already has a pending invitation')) {
+          errorMsg = '⚠️ Đã có lời mời đang chờ duyệt cho email này.';
+        } else if (errorMsg.contains('Only Owner or ProjectManager') || errorMsg.contains('permission')) {
+          errorMsg = '🚫 Chỉ Owner hoặc Project Manager mới có quyền gửi lời mời.';
+        }
+        _error = errorMsg;
+        _isLoading = false;
+      });
     }
   }
 

@@ -29,10 +29,12 @@ class TaskModel {
   final DateTime? deadline;
   final int? estimatedTimeMinutes;
   final double priorityScore; // Điểm gợi ý từ AI (Quan trọng)
+  final String? aiReason; // Lý do AI gợi ý (NEW)
   final String? workspaceId;
   final List<String> assigneeUserIds; // Changed from assigneeId to match API response
   final DateTime? createdAt;
   final DateTime? updatedAt;
+  final DateTime? completedAt; // Thời điểm hoàn thành task
 
   TaskModel({
     required this.taskId,
@@ -43,10 +45,12 @@ class TaskModel {
     this.deadline,
     this.estimatedTimeMinutes,
     required this.priorityScore,
+    this.aiReason,
     this.workspaceId,
     List<String>? assigneeUserIds,
     this.createdAt,
     this.updatedAt,
+    this.completedAt,
   }) : assigneeUserIds = assigneeUserIds ?? [];
 
   factory TaskModel.fromJson(Map<String, dynamic> json) {
@@ -60,6 +64,7 @@ class TaskModel {
       deadline: json['deadline'] != null ? DateTime.parse(json['deadline']).toLocal() : null,
       estimatedTimeMinutes: json['estimatedTimeMinutes'],
       priorityScore: (json['priorityScore'] ?? 0.0).toDouble(),
+      aiReason: json['aiReason']?.toString() ?? json['reason']?.toString(), // NEW
       workspaceId: json['workspaceId']?.toString(),
       assigneeUserIds: (json['assigneeUserIds'] as List<dynamic>?)
           ?.map((id) => id.toString())
@@ -67,6 +72,7 @@ class TaskModel {
       // Convert UTC to local time when receiving from API
       createdAt: json['createdAt'] != null ? DateTime.parse(json['createdAt']).toLocal() : null,
       updatedAt: json['updatedAt'] != null ? DateTime.parse(json['updatedAt']).toLocal() : null,
+      completedAt: json['completedAt'] != null ? DateTime.parse(json['completedAt']).toLocal() : null,
     );
   }
 
@@ -86,6 +92,7 @@ class TaskModel {
       // Convert local time to UTC when sending to API
       'createdAt': createdAt?.toUtc().toIso8601String(),
       'updatedAt': updatedAt?.toUtc().toIso8601String(),
+      'completedAt': completedAt?.toUtc().toIso8601String(),
     };
   }
 

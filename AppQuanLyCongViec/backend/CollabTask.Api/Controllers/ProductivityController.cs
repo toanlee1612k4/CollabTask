@@ -31,15 +31,26 @@ namespace CollabTask.Api.Controllers
             var start = startDate ?? DateTime.UtcNow.AddMonths(-1);
             var end = endDate ?? DateTime.UtcNow;
 
-            // Total tasks assigned
+            // ⚡ PERFORMANCE: Add AsNoTracking() to all read-only queries
+            // Total tasks assigned (in date range for trend analysis)
             var totalAssigned = await _context.TaskAssignments
+                .AsNoTracking()
                 .Where(ta => ta.AssigneeUserID == userId 
                     && ta.AssignedAt >= start 
                     && ta.AssignedAt <= end)
                 .CountAsync();
 
-            // Total tasks completed
+            // ✅ Total tasks completed (ALL TIME - không filter theo date range)
+            // Đây là tổng số task đã hoàn thành từ trước đến nay
             var totalCompleted = await _context.TaskAssignments
+                .AsNoTracking()
+                .Where(ta => ta.AssigneeUserID == userId 
+                    && ta.Status == Models.TaskAssignmentStatus.Approved)
+                .CountAsync();
+
+            // Total completed in date range (for trend analysis)
+            var completedInRange = await _context.TaskAssignments
+                .AsNoTracking()
                 .Where(ta => ta.AssigneeUserID == userId 
                     && ta.Status == Models.TaskAssignmentStatus.Approved
                     && ta.ApprovedAt >= start 
@@ -48,12 +59,14 @@ namespace CollabTask.Api.Controllers
 
             // Pending tasks
             var totalPending = await _context.TaskAssignments
+                .AsNoTracking()
                 .Where(ta => ta.AssigneeUserID == userId 
                     && ta.Status == Models.TaskAssignmentStatus.Pending)
                 .CountAsync();
 
             // In progress tasks
             var totalInProgress = await _context.TaskAssignments
+                .AsNoTracking()
                 .Where(ta => ta.AssigneeUserID == userId 
                     && (ta.Status == Models.TaskAssignmentStatus.Accepted 
                         || ta.Status == Models.TaskAssignmentStatus.InProgress))
@@ -61,21 +74,37 @@ namespace CollabTask.Api.Controllers
 
             // Awaiting approval
             var totalAwaitingApproval = await _context.TaskAssignments
+                .AsNoTracking()
                 .Where(ta => ta.AssigneeUserID == userId 
                     && ta.Status == Models.TaskAssignmentStatus.CompletionRequested)
                 .CountAsync();
 
             // Rejected tasks
             var totalRejected = await _context.TaskAssignments
+                .AsNoTracking()
                 .Where(ta => ta.AssigneeUserID == userId 
                     && ta.Status == Models.TaskAssignmentStatus.Rejected)
                 .CountAsync();
 
-            // Completion rate
-            var completionRate = totalAssigned > 0 ? (double)totalCompleted / totalAssigned * 100 : 0;
+            // ✅ Total tasks ALL TIME (for overall completion rate)
+            var totalAssignedAllTime = await _context.TaskAssignments
+                .AsNoTracking()
+                .Where(ta => ta.AssigneeUserID == userId)
+                .CountAsync();
+
+            // Completion rate (ALL TIME)
+            var completionRate = totalAssignedAllTime > 0 
+                ? (double)totalCompleted / totalAssignedAllTime * 100 
+                : 0;
+
+            // Completion rate in current period (for trend)
+            var completionRateInRange = totalAssigned > 0 
+                ? (double)completedInRange / totalAssigned * 100 
+                : 0;
 
             // Average completion time (in days)
             var completionTimes = await _context.TaskAssignments
+                .AsNoTracking()
                 .Where(ta => ta.AssigneeUserID == userId 
                     && ta.Status == Models.TaskAssignmentStatus.Approved
                     && ta.ApprovedAt.HasValue)
@@ -92,6 +121,7 @@ namespace CollabTask.Api.Controllers
 
             // Tasks by priority
             var tasksByPriority = await _context.TaskAssignments
+                .AsNoTracking()
                 .Where(ta => ta.AssigneeUserID == userId 
                     && ta.Status != Models.TaskAssignmentStatus.Rejected)
                 .Include(ta => ta.Task)
@@ -101,6 +131,7 @@ namespace CollabTask.Api.Controllers
 
             // Recent completed tasks
             var recentCompleted = await _context.TaskAssignments
+                .AsNoTracking()
                 .Where(ta => ta.AssigneeUserID == userId 
                     && ta.Status == Models.TaskAssignmentStatus.Approved
                     && ta.ApprovedAt >= start 
@@ -124,6 +155,7 @@ namespace CollabTask.Api.Controllers
             // Task completion trend (last 30 days, grouped by day)
             var last30Days = DateTime.UtcNow.AddDays(-30);
             var completionTrend = await _context.TaskAssignments
+                .AsNoTracking()
                 .Where(ta => ta.AssigneeUserID == userId 
                     && ta.Status == Models.TaskAssignmentStatus.Approved
                     && ta.ApprovedAt.HasValue
@@ -137,13 +169,23 @@ namespace CollabTask.Api.Controllers
                 {
                     summary = new
                     {
-                        totalAssigned,
-                        totalCompleted,
+                        // Overall stats (ALL TIME)
+                        totalCompleted, // Tổng số task hoàn thành từ trước đến nay
+                        totalAssigned = totalAssignedAllTime, // Tổng số task được assign từ trước đến nay
+                        completionRate = Math.Round(completionRate, 2), // Tỷ lệ hoàn thành ALL TIME
+                        
+                        // Current period stats (in date range)
+                        totalAssignedInPeriod = totalAssigned,
+                        completedInPeriod = completedInRange,
+                        completionRateInPeriod = Math.Round(completionRateInRange, 2),
+                        
+                        // Current status
                         totalPending,
                         totalInProgress,
                         totalAwaitingApproval,
                         totalRejected,
-                        completionRate = Math.Round(completionRate, 2),
+                        
+                        // Performance metrics
                         avgCompletionDays = Math.Round(avgCompletionDays, 2)
                     },
                     tasksByPriority,
@@ -339,10 +381,12 @@ namespace CollabTask.Api.Controllers
 
                 var now = DateTime.UtcNow;
 
-                // Lấy tasks được assign cho user và chưa hoàn thành
+                // ✅ SECURE: Lấy tasks được assign cho user và chưa hoàn thành
+                // ⚡ PERFORMANCE: Add AsNoTracking()
                 var relevantStatuses = new[] { "ToDo", "InProgress", "Review" };
                 
                 var assignedTasks = await _context.TaskAssignments
+                    .AsNoTracking()
                     .Where(ta => ta.AssigneeUserID == userId
                         && (ta.Status == Models.TaskAssignmentStatus.Accepted
                             || ta.Status == Models.TaskAssignmentStatus.InProgress
@@ -443,6 +487,7 @@ namespace CollabTask.Api.Controllers
 
             // Check if user is a member
             var isMember = await _context.WorkspaceMembers
+                .AsNoTracking()
                 .AnyAsync(wm => wm.WorkspaceID == workspaceId && wm.UserID == userId);
             
             if (!isMember) return Forbid();

@@ -73,10 +73,17 @@ class _WorkspaceMembersScreenState extends State<WorkspaceMembersScreen> {
 
     try {
       await apiClient.addWorkspaceMember(widget.workspaceId, email);
+      
+      // CRITICAL FIX: Check mounted AFTER await before using context/setState
+      if (!mounted) return;
+      
       _inviteEmailController.clear();
       _showSnackBar('Đã gửi lời mời đến $email');
-      _loadMembers(); // Refresh list
+      await _loadMembers(); // Refresh list
     } catch (e) {
+      // CRITICAL FIX: Check mounted AFTER await before using context
+      if (!mounted) return;
+      
       _showSnackBar('Lỗi: ${e.toString()}', isError: true);
     }
   }
@@ -92,9 +99,16 @@ class _WorkspaceMembersScreenState extends State<WorkspaceMembersScreen> {
         '/api/workspaces/${widget.workspaceId}/members/${member.userId}/role',
         data: {'newRole': newRole},
       );
+      
+      // CRITICAL FIX: Check mounted AFTER await before using context
+      if (!mounted) return;
+      
       _showSnackBar('Đã cập nhật role thành $newRole');
-      _loadMembers(); // Refresh list
+      await _loadMembers(); // Refresh list
     } catch (e) {
+      // CRITICAL FIX: Check mounted AFTER await before using context
+      if (!mounted) return;
+      
       _showSnackBar('Lỗi: ${e.toString()}', isError: true);
     }
   }
@@ -128,9 +142,16 @@ class _WorkspaceMembersScreenState extends State<WorkspaceMembersScreen> {
 
     try {
       await apiClient.removeWorkspaceMember(widget.workspaceId, member.userId);
+      
+      // CRITICAL FIX: Check mounted AFTER await before using context
+      if (!mounted) return;
+      
       _showSnackBar('Đã xóa thành viên');
-      _loadMembers(); // Refresh list
+      await _loadMembers(); // Refresh list
     } catch (e) {
+      // CRITICAL FIX: Check mounted AFTER await before using context
+      if (!mounted) return;
+      
       _showSnackBar('Lỗi: ${e.toString()}', isError: true);
     }
   }

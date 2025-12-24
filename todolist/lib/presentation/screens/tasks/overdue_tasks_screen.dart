@@ -32,12 +32,18 @@ class _OverdueTasksScreenState extends State<OverdueTasksScreen> {
     });
 
     try {
-      // Lấy tất cả task rồi filter overdue
-      final allTasks = await _apiClient.getSuggestedTasks();
+      // ✅ Lấy tất cả my tasks (không filter status) để tìm overdue tasks
+      final result = await _apiClient.getMyTasks(page: 1, pageSize: 1000);
+      final allTasks = result.items;
+      
       final now = DateTime.now();
       final overdue = allTasks.where((t) {
+        // Skip completed/done tasks
+        if (t.status.toLowerCase() == 'completed' || t.status.toLowerCase() == 'done') {
+          return false;
+        }
+        // Only tasks with deadline that passed
         if (t.deadline == null) return false;
-        if (t.status == 'Completed') return false;
         return t.deadline!.isBefore(now);
       }).toList();
       

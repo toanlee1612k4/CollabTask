@@ -74,21 +74,38 @@ namespace CollabTask.Api.Services.PriorityScoringService
             var sortedTaskDtos = scoredTasks
                 .OrderByDescending(t => t.PriorityScore)
                 .Take(20) // Only return top 20 suggestions
-                .Select(t => new TaskDto
+                .Select(t => 
                 {
-                    TaskId = t.Task.TaskID,
-                    WorkspaceId = t.Task.WorkspaceID,
-                    Title = t.Task.Title,
-                    Description = t.Task.Description,
-                    Status = t.Task.Status,
-                    Priority = t.Task.Priority,
-                    Deadline = t.Task.Deadline,
-                    EstimatedTimeMinutes = t.Task.EstimatedTimeMinutes,
-                    CreatorUserId = t.Task.CreatorUserID,
-                    CreatedAt = t.Task.CreatedAt,
-                    CompletedAt = t.Task.CompletedAt,
-                    AssigneeUserIds = t.AssigneeIds,
-                    PriorityScore = t.PriorityScore
+                    var dto = new TaskDto
+                    {
+                        TaskId = t.Task.TaskID,
+                        WorkspaceId = t.Task.WorkspaceID,
+                        Title = t.Task.Title,
+                        Description = t.Task.Description,
+                        Status = t.Task.Status,
+                        Priority = t.Task.Priority,
+                        Deadline = t.Task.Deadline,
+                        EstimatedTimeMinutes = t.Task.EstimatedTimeMinutes,
+                        CreatorUserId = t.Task.CreatorUserID,
+                        CreatedAt = t.Task.CreatedAt,
+                        CompletedAt = t.Task.CompletedAt,
+                        AssigneeUserIds = t.AssigneeIds,
+                        PriorityScore = t.PriorityScore
+                    };
+
+                    // === EXPLAINABILITY: Giải thích lý do gợi ý ===
+                    var (reason, matchedTrait) = GenerateRecommendationExplanation(
+                        t.Task, 
+                        userWeights, 
+                        CalculateDeadlineScore(t.Task),
+                        CalculateImportanceScore(t.Task),
+                        CalculateEffortScore(t.Task)
+                    );
+
+                    dto.RecommendationReason = reason;
+                    dto.MatchedTrait = matchedTrait;
+
+                    return dto;
                 })
                 .ToList();
 
@@ -189,6 +206,72 @@ namespace CollabTask.Api.Services.PriorityScoringService
             if (minutes <= 240) return 0.7m;
 
             return 0.4m;
+        }
+
+        /// <summary>
+        /// Tạo lý do giải thích cho recommendation (Explainability)
+        /// </summary>
+        private (string Reason, string MatchedTrait) GenerateRecommendationExplanation(
+            Task task,
+            UserTaskWeight userWeights,
+            decimal deadlineScore,
+            decimal importanceScore,
+            decimal effortScore)
+        {
+            var trait = userWeights.DominantTrait;
+            string traitName = GetTraitDisplayName(trait);
+            string reason;
+
+            switch (trait)
+            {
+                case UserTrait.Sprinter:
+                    var minutes = task.EstimatedTimeMinutes ?? 0;
+                    reason = minutes > 0 
+                        ? $"Task này được gợi ý vì bạn là '{traitName}' và task này chỉ tốn {minutes} phút (effort thấp)."
+                        : $"Task này được gợi ý vì bạn là '{traitName}' và thường ưu tiên task ngắn.";
+                    break;
+
+                case UserTrait.Procrastinator:
+                    var daysRemaining = task.Deadline.HasValue 
+                        ? (task.Deadline.Value - DateTime.UtcNow).TotalDays 
+                        : double.MaxValue;
+                    
+                    if (daysRemaining < 1)
+                        reason = $"Task này được gợi ý vì bạn là '{traitName}' và task này SẮP QUÁ HẠN trong {Math.Max(0, daysRemaining * 24):F1} giờ!";
+                    else if (daysRemaining < 3)
+                        reason = $"Task này được gợi ý vì bạn là '{traitName}' và task này còn {daysRemaining:F1} ngày (sát deadline).";
+                    else
+                        reason = $"Task này được gợi ý vì bạn là '{traitName}' và thường làm task sát deadline.";
+                    break;
+
+                case UserTrait.Planner:
+                    var priority = task.Priority?.ToLower() ?? "medium";
+                    if (priority == "high")
+                        reason = $"Task này được gợi ý vì bạn là '{traitName}' và task này có độ ưu tiên CAO (quan trọng).";
+                    else if (priority == "medium")
+                        reason = $"Task này được gợi ý vì bạn là '{traitName}' và task này có độ ưu tiên TRUNG BÌNH.";
+                    else
+                        reason = $"Task này được gợi ý vì bạn là '{traitName}' và thường ưu tiên task quan trọng.";
+                    break;
+
+                default: // Unknown
+                    reason = "Task này được gợi ý dựa trên thuật toán AI (chúng tôi đang học về phong cách làm việc của bạn).";
+                    traitName = "Chưa xác định";
+                    break;
+            }
+
+            return (reason, traitName);
+        }
+
+        private string GetTraitDisplayName(UserTrait trait)
+        {
+            return trait switch
+            {
+                UserTrait.Sprinter => "The Sprinter - Người chạy nước rút",
+                UserTrait.Procrastinator => "The Procrastinator - Người nước đến chân mới nhảy",
+                UserTrait.Planner => "The Planner - Người quy hoạch",
+                _ => "Chưa xác định"
+            };
         }
     }
 }

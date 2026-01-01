@@ -2,6 +2,7 @@ using CollabTask.Api.Data;
 using CollabTask.Api.Dtos.Auth;
 using CollabTask.Api.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
@@ -34,21 +35,51 @@ namespace CollabTask.Api.Services.AuthService
                 throw new InvalidOperationException($"Vai trò mặc định '{DefaultUserRole}' không tồn tại trong CSDL.");
             }
 
-            string passwordHash = BCrypt.Net.BCrypt.HashPassword(request.Password);
-
-            var newUser = new User
+            // === SỬ DỤNG TRANSACTION ĐỂ ĐẢM BẢO DATA INTEGRITY ===
+            using IDbContextTransaction transaction = await _context.Database.BeginTransactionAsync();
+            try
             {
-                UserID = Guid.NewGuid(),
-                FullName = request.FullName,
-                Email = request.Email,
-                PasswordHash = passwordHash,
-                SystemRoleID = userRole.RoleID,
-                CreatedAt = DateTime.UtcNow
-            };
+                string passwordHash = BCrypt.Net.BCrypt.HashPassword(request.Password);
 
-            _context.Users.Add(newUser);
-            await _context.SaveChangesAsync();
-            return newUser;
+                var newUser = new User
+                {
+                    UserID = Guid.NewGuid(),
+                    FullName = request.FullName,
+                    Email = request.Email,
+                    PasswordHash = passwordHash,
+                    SystemRoleID = userRole.RoleID,
+                    CreatedAt = DateTime.UtcNow
+                };
+
+                _context.Users.Add(newUser);
+                await _context.SaveChangesAsync();
+
+                // === KHỞI TẠO USER TRAITS MẶC ĐỊNH ===
+                // Tạo UserTaskWeight với giá trị mặc định cho user mới
+                var userWeight = new UserTaskWeight
+                {
+                    UserID = newUser.UserID,
+                    DeadlineWeight = 0.5m,      // 50% ưu tiên deadline
+                    ImportanceWeight = 0.3m,    // 30% ưu tiên độ quan trọng
+                    EffortWeight = 0.2m,        // 20% ưu tiên độ nhanh (effort thấp)
+                    DominantTrait = UserTrait.Unknown, // Chưa đủ dữ liệu để phân loại
+                    LastUpdatedAt = DateTime.UtcNow
+                };
+
+                _context.UserTaskWeights.Add(userWeight);
+                await _context.SaveChangesAsync();
+
+                // Commit transaction nếu tất cả thành công
+                await transaction.CommitAsync();
+
+                return newUser;
+            }
+            catch (Exception)
+            {
+                // Rollback nếu có lỗi (xóa luôn User đã tạo)
+                await transaction.RollbackAsync();
+                throw; // Re-throw exception để controller xử lý
+            }
         }
 
         public async Task<string> Login(UserLoginDto request)

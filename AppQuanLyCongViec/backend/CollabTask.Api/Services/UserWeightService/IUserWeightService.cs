@@ -24,5 +24,10 @@ namespace CollabTask.Api.Services.UserWeightService
         /// Reset weights về mặc định
         /// </summary>
         System.Threading.Tasks.Task ResetUserWeights(Guid userId);
+
+        /// <summary>
+        /// Xác định User Trait dựa trên weights
+        /// </summary>
+        UserTrait DetermineUserTrait(UserTaskWeight weights);
     }
 }

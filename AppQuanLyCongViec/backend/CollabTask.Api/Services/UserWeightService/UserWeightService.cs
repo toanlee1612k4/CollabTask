@@ -18,6 +18,9 @@ namespace CollabTask.Api.Services.UserWeightService
         private const int MinimumInteractionsToLearn = 5; // Cần ít nhất 5 task để bắt đầu học
         private const decimal LearningRate = 0.1m; // Tốc độ học (0.1 = 10%)
 
+        // Ngưỡng phân loại User Traits
+        private const decimal TraitThreshold = 0.4m;
+
         public UserWeightService(CollabTaskDbContext context)
         {
             _context = context;
@@ -99,9 +102,45 @@ namespace CollabTask.Api.Services.UserWeightService
             userWeights.ImportanceWeight /= sum;
             userWeights.EffortWeight /= sum;
 
+            // Tự động phân loại User Trait
+            userWeights.DominantTrait = DetermineUserTrait(userWeights);
+
             userWeights.LastUpdatedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
+        }
+
+        /// <summary>
+        /// Xác định User Trait dựa trên weights
+        /// </summary>
+        public UserTrait DetermineUserTrait(UserTaskWeight weights)
+        {
+            // Procrastinator: DeadlineWeight cao nhất và > 0.4
+            if (weights.DeadlineWeight > TraitThreshold && 
+                weights.DeadlineWeight > weights.ImportanceWeight && 
+                weights.DeadlineWeight > weights.EffortWeight)
+            {
+                return UserTrait.Procrastinator;
+            }
+
+            // Planner: ImportanceWeight cao nhất và > 0.4
+            if (weights.ImportanceWeight > TraitThreshold && 
+                weights.ImportanceWeight > weights.DeadlineWeight && 
+                weights.ImportanceWeight > weights.EffortWeight)
+            {
+                return UserTrait.Planner;
+            }
+
+            // Sprinter: EffortWeight cao nhất và > 0.4
+            if (weights.EffortWeight > TraitThreshold && 
+                weights.EffortWeight > weights.DeadlineWeight && 
+                weights.EffortWeight > weights.ImportanceWeight)
+            {
+                return UserTrait.Sprinter;
+            }
+
+            // Chưa đủ điều kiện phân loại
+            return UserTrait.Unknown;
         }
 
         public async Task<UserTaskWeight> GetOrCreateUserWeights(Guid userId)
@@ -116,6 +155,7 @@ namespace CollabTask.Api.Services.UserWeightService
                     DeadlineWeight = DefaultDeadlineWeight,
                     ImportanceWeight = DefaultImportanceWeight,
                     EffortWeight = DefaultEffortWeight,
+                    DominantTrait = UserTrait.Unknown,
                     LastUpdatedAt = DateTime.UtcNow
                 };
 
@@ -135,6 +175,7 @@ namespace CollabTask.Api.Services.UserWeightService
                 weights.DeadlineWeight = DefaultDeadlineWeight;
                 weights.ImportanceWeight = DefaultImportanceWeight;
                 weights.EffortWeight = DefaultEffortWeight;
+                weights.DominantTrait = UserTrait.Unknown;
                 weights.LastUpdatedAt = DateTime.UtcNow;
 
                 await _context.SaveChangesAsync();

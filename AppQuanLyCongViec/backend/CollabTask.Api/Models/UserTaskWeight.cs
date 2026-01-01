@@ -19,6 +19,12 @@ namespace CollabTask.Api.Models
 
         public DateTime LastUpdatedAt { get; set; } = DateTime.UtcNow;
 
+        /// <summary>
+        /// Key Trait (đặc điểm làm việc) của user dựa trên weights
+        /// Được tự động tính toán khi weights thay đổi
+        /// </summary>
+        public UserTrait DominantTrait { get; set; } = UserTrait.Unknown;
+
         // Navigation property
         [ForeignKey("UserID")]
         public User? User { get; set; }

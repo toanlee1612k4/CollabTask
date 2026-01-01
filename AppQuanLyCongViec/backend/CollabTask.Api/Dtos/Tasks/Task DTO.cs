@@ -17,5 +17,16 @@ namespace CollabTask.Api.Dtos.Tasks
         public DateTime? CompletedAt { get; set; } 
         public List<Guid> AssigneeUserIds { get; set; } = new List<Guid>(); 
         public decimal? PriorityScore { get; set; } // Lỗi CS0103 xảy ra vì thiếu thuộc tính này
+
+        /// <summary>
+        /// Lý do tại sao task này được gợi ý (Explainability)
+        /// VD: "Task này được gợi ý vì bạn là 'The Sprinter' và task này chỉ tốn 30 phút."
+        /// </summary>
+        public string? RecommendationReason { get; set; }
+
+        /// <summary>
+        /// Key Trait phù hợp với task này (Sprinter, Procrastinator, Planner)
+        /// </summary>
+        public string? MatchedTrait { get; set; }
     }
 }

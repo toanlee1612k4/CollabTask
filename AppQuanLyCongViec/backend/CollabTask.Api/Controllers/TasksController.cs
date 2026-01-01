@@ -4,6 +4,7 @@ using CollabTask.Api.Dtos.Comments;
 using CollabTask.Api.Helpers;
 using CollabTask.Api.Models; 
 using CollabTask.Api.Services.PriorityScoringService;
+using CollabTask.Api.Services.UserWeightService;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -18,11 +19,16 @@ namespace CollabTask.Api.Controllers
     {
         private readonly CollabTaskDbContext _context;
         private readonly IPriorityScoringService _priorityScoringService;
+        private readonly IUserWeightService _userWeightService;
 
-        public TasksController(CollabTaskDbContext context, IPriorityScoringService priorityScoringService)
+        public TasksController(
+            CollabTaskDbContext context, 
+            IPriorityScoringService priorityScoringService,
+            IUserWeightService userWeightService)
         {
             _context = context;
             _priorityScoringService = priorityScoringService;
+            _userWeightService = userWeightService;
         }
         [HttpGet("suggested")]
         public async Task<ActionResult<List<TaskDto>>> GetSuggestedTasks()
@@ -190,9 +196,101 @@ namespace CollabTask.Api.Controllers
             }
         }
 
-        // GET: api/tasks - Lấy tất cả tasks mà user đang được assign
-        [HttpGet("tasks")]
+        // GET: api/tasks/my-tasks - Tổng hợp TẤT CẢ tasks cá nhân của user
+        /// <summary>
+        /// API tổng hợp tasks cá nhân (dùng cho "My Tasks" và "Calendar")
+        /// LOGIC QUERY:
+        /// - Lấy Task CÁ NHÂN (WorkspaceID == null) mà user tạo
+        /// - HOẶC Task WORKSPACE (WorkspaceID != null) mà user được ASSIGN
+        /// - KHÔNG lấy task workspace mà user chỉ là member nhưng không được assign
+        /// </summary>
+        [HttpGet("tasks/my-tasks")]
         public async Task<ActionResult<PagedResult<TaskDto>>> GetMyTasks(
+            [FromQuery] int page = 1,
+            [FromQuery] int pageSize = 50,
+            [FromQuery] string? status = null,
+            [FromQuery] string? priority = null,
+            [FromQuery] DateTime? startDate = null,
+            [FromQuery] DateTime? endDate = null)
+        {
+            var userId = User.GetUserId();
+            if (userId == Guid.Empty) return Unauthorized(new { message = "Invalid user token" });
+
+            // Validate pagination
+            if (page < 1) page = 1;
+            if (pageSize < 1) pageSize = 50;
+            if (pageSize > 100) pageSize = 100;
+
+            // === LOGIC QUERY CHÍNH XÁC ===
+            // Điều kiện 1: Task cá nhân (không thuộc workspace) do user tạo
+            var personalTasksQuery = _context.Tasks
+                .AsNoTracking()
+                .Where(t => t.WorkspaceID == null && t.CreatorUserID == userId);
+
+            // Điều kiện 2: Task workspace được assign cho user
+            var workspaceTasksQuery = _context.Tasks
+                .AsNoTracking()
+                .Where(t => t.WorkspaceID != null 
+                         && t.TaskAssignments.Any(ta => ta.AssigneeUserID == userId));
+
+            // Kết hợp 2 query bằng Union
+            var combinedQuery = personalTasksQuery.Union(workspaceTasksQuery);
+
+            // Apply filters
+            if (!string.IsNullOrEmpty(status))
+                combinedQuery = combinedQuery.Where(t => t.Status == status);
+            
+            if (!string.IsNullOrEmpty(priority))
+                combinedQuery = combinedQuery.Where(t => t.Priority == priority);
+
+            // Apply date range filter (nếu có)
+            if (startDate.HasValue)
+                combinedQuery = combinedQuery.Where(t => t.Deadline >= startDate.Value);
+
+            if (endDate.HasValue)
+                combinedQuery = combinedQuery.Where(t => t.Deadline <= endDate.Value);
+
+            // Get total count
+            var totalCount = await combinedQuery.CountAsync();
+
+            // Apply pagination với Include để load TaskAssignments
+            var tasks = await combinedQuery
+                .OrderByDescending(t => t.CreatedAt)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .Include(t => t.TaskAssignments)
+                .Select(t => new TaskDto
+                {
+                    TaskId = t.TaskID,
+                    WorkspaceId = t.WorkspaceID,
+                    Title = t.Title,
+                    Description = t.Description,
+                    Status = t.Status,
+                    Priority = t.Priority,
+                    Deadline = t.Deadline,
+                    EstimatedTimeMinutes = t.EstimatedTimeMinutes,
+                    CreatorUserId = t.CreatorUserID,
+                    CreatedAt = t.CreatedAt,
+                    CompletedAt = t.CompletedAt,
+                    AssigneeUserIds = t.TaskAssignments.Select(ta => ta.AssigneeUserID).ToList(),
+                    PriorityScore = null,
+                    RecommendationReason = null,
+                    MatchedTrait = null
+                })
+                .ToListAsync();
+
+            return Ok(new PagedResult<TaskDto>
+            {
+                Items = tasks,
+                TotalCount = totalCount,
+                CurrentPage = page,
+                PageSize = pageSize
+            });
+        }
+
+        // GET: api/tasks - Lấy tất cả tasks mà user đang được assign (LEGACY - keep for backward compatibility)
+        [HttpGet("tasks")]
+        public async Task<ActionResult<PagedResult<TaskDto>>> GetMyAssignedTasks(
             [FromQuery] int page = 1,
             [FromQuery] int pageSize = 50,
             [FromQuery] string? status = null,
@@ -844,10 +942,14 @@ namespace CollabTask.Api.Controllers
                     task.Status = "Done";
                     task.CompletedAt = DateTime.UtcNow;
                     
-                    // Log to AI system
+                    // === TRIGGER HỌC MÁY: Log completion & Update weights ===
                     foreach (var assignment in completionRequests)
                     {
+                        // Log vào hệ thống AI
                         await _priorityScoringService.LogTaskCompletion(task, assignment.AssigneeUserID);
+                        
+                        // Trigger học máy ngay lập tức
+                        await _userWeightService.LearnFromTaskCompletion(task, assignment.AssigneeUserID);
                     }
                 }
 
@@ -1078,8 +1180,9 @@ namespace CollabTask.Api.Controllers
             {
                 task.CompletedAt = DateTime.UtcNow;
                 
-                // SỬA TÊN BIẾN Ở ĐÂY
-                await _priorityScoringService.LogTaskCompletion(task, userId); 
+                // === TRIGGER HỌC MÁY: Log completion & Update weights ===
+                await _priorityScoringService.LogTaskCompletion(task, userId);
+                await _userWeightService.LearnFromTaskCompletion(task, userId);
             }
             else
             {
@@ -1251,8 +1354,9 @@ namespace CollabTask.Api.Controllers
 
             await _context.SaveChangesAsync();
 
-            // Gọi service để log completion
+            // === TRIGGER HỌC MÁY: Log completion & Update weights ===
             await _priorityScoringService.LogTaskCompletion(task, userId);
+            await _userWeightService.LearnFromTaskCompletion(task, userId);
 
             return Ok(new { message = "Task completed successfully" });
         }

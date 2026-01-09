@@ -11,6 +11,7 @@ import 'providers/auth_provider.dart';
 import 'core/providers/legacy_providers.dart';
 import 'core/theme/theme_provider.dart';
 import 'presentation/screens/splash_screen.dart';
+import 'presentation/screens/auth/login_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -90,6 +91,10 @@ class CollabTaskApp extends StatelessWidget {
             ),
             themeMode: themeProvider.isDarkMode ? ThemeMode.dark : ThemeMode.light,
             home: const SplashScreen(),
+            // ✅ Routes cho navigation
+            routes: {
+              '/login': (context) => const LoginScreen(),
+            },
           );
         },
       ),

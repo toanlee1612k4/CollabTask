@@ -73,17 +73,17 @@ class _WorkspaceMembersScreenState extends State<WorkspaceMembersScreen> {
 
     try {
       await apiClient.addWorkspaceMember(widget.workspaceId, email);
-      
+
       // CRITICAL FIX: Check mounted AFTER await before using context/setState
       if (!mounted) return;
-      
+
       _inviteEmailController.clear();
       _showSnackBar('Đã gửi lời mời đến $email');
       await _loadMembers(); // Refresh list
     } catch (e) {
       // CRITICAL FIX: Check mounted AFTER await before using context
       if (!mounted) return;
-      
+
       _showSnackBar('Lỗi: ${e.toString()}', isError: true);
     }
   }
@@ -99,16 +99,16 @@ class _WorkspaceMembersScreenState extends State<WorkspaceMembersScreen> {
         '/api/workspaces/${widget.workspaceId}/members/${member.userId}/role',
         data: {'newRole': newRole},
       );
-      
+
       // CRITICAL FIX: Check mounted AFTER await before using context
       if (!mounted) return;
-      
+
       _showSnackBar('Đã cập nhật role thành $newRole');
       await _loadMembers(); // Refresh list
     } catch (e) {
       // CRITICAL FIX: Check mounted AFTER await before using context
       if (!mounted) return;
-      
+
       _showSnackBar('Lỗi: ${e.toString()}', isError: true);
     }
   }
@@ -123,7 +123,9 @@ class _WorkspaceMembersScreenState extends State<WorkspaceMembersScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Xác nhận'),
-        content: Text('Bạn có chắc muốn xóa ${member.fullName ?? member.email} khỏi workspace?'),
+        content: Text(
+          'Bạn có chắc muốn xóa ${member.fullName ?? member.email} khỏi workspace?',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -142,16 +144,16 @@ class _WorkspaceMembersScreenState extends State<WorkspaceMembersScreen> {
 
     try {
       await apiClient.removeWorkspaceMember(widget.workspaceId, member.userId);
-      
+
       // CRITICAL FIX: Check mounted AFTER await before using context
       if (!mounted) return;
-      
+
       _showSnackBar('Đã xóa thành viên');
       await _loadMembers(); // Refresh list
     } catch (e) {
       // CRITICAL FIX: Check mounted AFTER await before using context
       if (!mounted) return;
-      
+
       _showSnackBar('Lỗi: ${e.toString()}', isError: true);
     }
   }
@@ -213,9 +215,7 @@ class _WorkspaceMembersScreenState extends State<WorkspaceMembersScreen> {
     }
 
     if (_members.isEmpty) {
-      return const Center(
-        child: Text('Chưa có thành viên nào'),
-      );
+      return const Center(child: Text('Chưa có thành viên nào'));
     }
 
     return RefreshIndicator(
@@ -233,14 +233,28 @@ class _WorkspaceMembersScreenState extends State<WorkspaceMembersScreen> {
   Widget _buildMemberCard(UserModel member) {
     final isCurrentUser = member.userId == widget.currentUserId;
     final isOwner = widget.currentUserRole == 'Owner';
+    final isPM = widget.currentUserRole == 'ProjectManager';
+    final canManageMembers = isOwner || isPM; // PM cũng có thể quản lý members
     final memberRole = member.roleName ?? 'Member';
+    final isMemberOwner =
+        memberRole == 'Owner'; // Không cho phép thao tác trên Owner
+
+    // DEBUG: Log để kiểm tra điều kiện hiển thị nút xóa
+    print('👤 Member: ${member.fullName ?? member.email}');
+    print('   - isCurrentUser: $isCurrentUser');
+    print('   - Current user role: ${widget.currentUserRole}');
+    print('   - isOwner (current user): $isOwner');
+    print('   - canManageMembers: $canManageMembers');
+    print('   - memberRole: $memberRole');
+    print('   - isMemberOwner: $isMemberOwner');
+    print(
+      '   - Show controls: ${canManageMembers && !isCurrentUser && !isMemberOwner}',
+    );
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -259,13 +273,14 @@ class _WorkspaceMembersScreenState extends State<WorkspaceMembersScreen> {
                             width: 56,
                             height: 56,
                             fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => _buildDefaultAvatar(member),
+                            errorBuilder: (_, __, ___) =>
+                                _buildDefaultAvatar(member),
                           ),
                         )
                       : _buildDefaultAvatar(member),
                 ),
                 const SizedBox(width: 12),
-                
+
                 // Info
                 Expanded(
                   child: Column(
@@ -289,7 +304,10 @@ class _WorkspaceMembersScreenState extends State<WorkspaceMembersScreen> {
                       if (isCurrentUser) ...[
                         const SizedBox(height: 4),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
                             color: Colors.blue.shade50,
                             borderRadius: BorderRadius.circular(4),
@@ -307,69 +325,83 @@ class _WorkspaceMembersScreenState extends State<WorkspaceMembersScreen> {
                     ],
                   ),
                 ),
-                
+
                 // Role badge
                 _buildRoleBadge(memberRole),
               ],
             ),
-            
-            // Role dropdown for Owner
-            if (isOwner && !isCurrentUser) ...[
+
+            // Role dropdown for Owner/PM - PM có thể quản lý nhưng không được thao tác trên Owner
+            if (canManageMembers && !isCurrentUser && !isMemberOwner) ...[
               const SizedBox(height: 16),
               const Divider(height: 1),
               const SizedBox(height: 12),
               Row(
                 children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Phân quyền',
-                          style: GoogleFonts.inter(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                            color: Colors.grey.shade700,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          decoration: BoxDecoration(
-                            border: Border.all(color: Colors.grey.shade300),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: DropdownButtonHideUnderline(
-                            child: DropdownButton<String>(
-                              value: memberRole,
-                              isExpanded: true,
-                              items: const [
-                                DropdownMenuItem(
-                                  value: 'Member',
-                                  child: Text('Member'),
-                                ),
-                                DropdownMenuItem(
-                                  value: 'ProjectManager',
-                                  child: Text('Project Manager'),
-                                ),
-                              ],
-                              onChanged: (newRole) {
-                                if (newRole != null && newRole != memberRole) {
-                                  _changeRole(member, newRole);
-                                }
-                              },
+                  // Chỉ Owner mới có thể thay đổi role
+                  if (isOwner)
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Phân quyền',
+                            style: GoogleFonts.inter(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.grey.shade700,
                             ),
                           ),
-                        ),
-                      ],
+                          const SizedBox(height: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            decoration: BoxDecoration(
+                              border: Border.all(color: Colors.grey.shade300),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: DropdownButtonHideUnderline(
+                              child: DropdownButton<String>(
+                                value: memberRole,
+                                isExpanded: true,
+                                items: const [
+                                  DropdownMenuItem(
+                                    value: 'Member',
+                                    child: Text('Member'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 'ProjectManager',
+                                    child: Text('Project Manager'),
+                                  ),
+                                ],
+                                onChanged: (newRole) {
+                                  if (newRole != null &&
+                                      newRole != memberRole) {
+                                    _changeRole(member, newRole);
+                                  }
+                                },
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
+                  // PM không đổi được role, nhưng cần spacer để nút xóa hiển thị đẹp
+                  if (!isOwner) const Expanded(child: SizedBox()),
                   const SizedBox(width: 12),
-                  IconButton(
-                    onPressed: () => _removeMember(member),
-                    icon: const Icon(Icons.delete_outline),
-                    color: Colors.red,
-                    tooltip: 'Xóa thành viên',
+                  // 🎨 NHIỆM VỤ 4: Nút xóa thành viên nổi bật hơn
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade50,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.red.shade200),
+                    ),
+                    child: IconButton(
+                      onPressed: () => _removeMember(member),
+                      icon: const Icon(Icons.person_remove_rounded),
+                      color: Colors.red.shade600,
+                      tooltip: 'Xóa thành viên khỏi workspace',
+                      iconSize: 22,
+                    ),
                   ),
                 ],
               ),
@@ -381,10 +413,12 @@ class _WorkspaceMembersScreenState extends State<WorkspaceMembersScreen> {
   }
 
   Widget _buildDefaultAvatar(UserModel member) {
-    final initial = (member.fullName?.isNotEmpty == true 
-        ? member.fullName![0] 
-        : member.email[0]).toUpperCase();
-    
+    final initial =
+        (member.fullName?.isNotEmpty == true
+                ? member.fullName![0]
+                : member.email[0])
+            .toUpperCase();
+
     return Text(
       initial,
       style: GoogleFonts.inter(
@@ -398,7 +432,7 @@ class _WorkspaceMembersScreenState extends State<WorkspaceMembersScreen> {
   Widget _buildRoleBadge(String role) {
     Color color;
     IconData icon;
-    
+
     switch (role) {
       case 'Owner':
         color = Colors.purple;

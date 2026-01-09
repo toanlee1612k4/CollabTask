@@ -44,8 +44,8 @@ class AiSuggestionsScreen extends ConsumerWidget {
   }
 
   Widget _buildBody(
-    BuildContext context, 
-    WidgetRef ref, 
+    BuildContext context,
+    WidgetRef ref,
     AiSuggestionsState suggestionsState,
     AuthState authState,
   ) {
@@ -78,7 +78,8 @@ class AiSuggestionsScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 16),
             ElevatedButton.icon(
-              onPressed: () => ref.read(aiSuggestionsProvider.notifier).refresh(),
+              onPressed: () =>
+                  ref.read(aiSuggestionsProvider.notifier).refresh(),
               icon: const Icon(Icons.refresh),
               label: const Text('Thử lại'),
             ),
@@ -93,16 +94,26 @@ class AiSuggestionsScreen extends ConsumerWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.check_circle_outline, size: 64, color: Colors.green.shade400),
+            Icon(
+              Icons.check_circle_outline,
+              size: 64,
+              color: Colors.green.shade400,
+            ),
             const SizedBox(height: 16),
             Text(
               'Tuyệt vời! 🎉',
-              style: GoogleFonts.inter(fontSize: 24, fontWeight: FontWeight.w600),
+              style: GoogleFonts.inter(
+                fontSize: 24,
+                fontWeight: FontWeight.w600,
+              ),
             ),
             const SizedBox(height: 8),
             Text(
               'Không có task nào cần ưu tiên',
-              style: GoogleFonts.inter(fontSize: 16, color: Colors.grey.shade600),
+              style: GoogleFonts.inter(
+                fontSize: 16,
+                color: Colors.grey.shade600,
+              ),
             ),
           ],
         ),
@@ -157,7 +168,7 @@ class AiSuggestionsScreen extends ConsumerWidget {
               ],
             ),
           ),
-          
+
           // Task List
           Expanded(
             child: ListView.builder(
@@ -165,9 +176,9 @@ class AiSuggestionsScreen extends ConsumerWidget {
               itemCount: suggestionsState.tasks.length,
               itemBuilder: (context, index) {
                 return _buildTaskCard(
-                  context, 
+                  context,
                   ref,
-                  suggestionsState.tasks[index], 
+                  suggestionsState.tasks[index],
                   index + 1,
                   authState.user?.userId ?? '',
                   authState.user?.roleName ?? 'Member',
@@ -181,9 +192,9 @@ class AiSuggestionsScreen extends ConsumerWidget {
   }
 
   Widget _buildTaskCard(
-    BuildContext context, 
+    BuildContext context,
     WidgetRef ref,
-    TaskModel task, 
+    TaskModel task,
     int rank,
     String currentUserId,
     String currentUserRole,
@@ -204,7 +215,7 @@ class AiSuggestionsScreen extends ConsumerWidget {
             ),
           ),
         );
-        
+
         // Refresh after returning
         ref.read(aiSuggestionsProvider.notifier).refresh();
       },
@@ -245,7 +256,8 @@ class AiSuggestionsScreen extends ConsumerWidget {
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                      color: (rank <= 3 ? Colors.amber : Colors.grey).withOpacity(0.3),
+                      color: (rank <= 3 ? Colors.amber : Colors.grey)
+                          .withOpacity(0.3),
                       blurRadius: 4,
                     ),
                   ],
@@ -262,7 +274,7 @@ class AiSuggestionsScreen extends ConsumerWidget {
                 ),
               ),
             ),
-            
+
             // Content
             Padding(
               padding: const EdgeInsets.fromLTRB(56, 12, 12, 12),
@@ -280,8 +292,9 @@ class AiSuggestionsScreen extends ConsumerWidget {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  
-                  if (task.description != null && task.description!.isNotEmpty) ...[
+
+                  if (task.description != null &&
+                      task.description!.isNotEmpty) ...[
                     const SizedBox(height: 4),
                     Text(
                       task.description!,
@@ -293,22 +306,32 @@ class AiSuggestionsScreen extends ConsumerWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ],
-                  
+
                   const SizedBox(height: 12),
-                  
+
                   // AI Score Display - QUAN TRỌNG
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
-                        colors: [Colors.purple.shade700, Colors.purple.shade500],
+                        colors: [
+                          Colors.purple.shade700,
+                          Colors.purple.shade500,
+                        ],
                       ),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.auto_awesome, size: 14, color: Colors.white),
+                        const Icon(
+                          Icons.auto_awesome,
+                          size: 14,
+                          color: Colors.white,
+                        ),
                         const SizedBox(width: 6),
                         Text(
                           'AI Score: ${task.priorityScore?.toStringAsFixed(1) ?? "N/A"}',
@@ -321,9 +344,9 @@ class AiSuggestionsScreen extends ConsumerWidget {
                       ],
                     ),
                   ),
-                  
+
                   const SizedBox(height: 12),
-                  
+
                   // Badges row
                   Wrap(
                     spacing: 8,
@@ -334,27 +357,20 @@ class AiSuggestionsScreen extends ConsumerWidget {
                         task.priorityLabel,
                         _getPriorityColor(task.priority),
                       ),
-                      
+
                       // Overdue badge
-                      if (isOverdue)
-                        _buildBadge(
-                          'Quá hạn!',
-                          Colors.red,
-                        ),
-                      
+                      if (isOverdue) _buildBadge('Quá hạn!', Colors.red),
+
                       // High priority badge
                       if (isHighPriority && !isOverdue)
-                        _buildBadge(
-                          'Ưu tiên cao',
-                          Colors.orange,
-                        ),
-                      
+                        _buildBadge('Ưu tiên cao', Colors.orange),
+
                       // Deadline
                       if (task.deadline != null)
                         _buildDeadlineBadge(task.deadline!),
                     ],
                   ),
-                  
+
                   // AI Reason (nếu có từ server)
                   if (task.aiReason != null && task.aiReason!.isNotEmpty) ...[
                     const SizedBox(height: 8),
@@ -367,7 +383,11 @@ class AiSuggestionsScreen extends ConsumerWidget {
                       ),
                       child: Row(
                         children: [
-                          Icon(Icons.info_outline, size: 14, color: Colors.purple.shade700),
+                          Icon(
+                            Icons.info_outline,
+                            size: 14,
+                            color: Colors.purple.shade700,
+                          ),
                           const SizedBox(width: 6),
                           Expanded(
                             child: Text(
@@ -414,7 +434,7 @@ class AiSuggestionsScreen extends ConsumerWidget {
   Widget _buildDeadlineBadge(DateTime deadline) {
     final isOverdue = deadline.isBefore(DateTime.now());
     final color = isOverdue ? Colors.red : Colors.blue;
-    
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
@@ -456,374 +476,10 @@ class AiSuggestionsScreen extends ConsumerWidget {
   String _formatTime(DateTime time) {
     final now = DateTime.now();
     final diff = now.difference(time);
-    
+
     if (diff.inMinutes < 1) return 'vừa xong';
     if (diff.inMinutes < 60) return '${diff.inMinutes} phút trước';
     if (diff.inHours < 24) return '${diff.inHours} giờ trước';
     return DateFormat('dd/MM/yyyy HH:mm').format(time);
-  }
-}
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.error_outline, size: 64, color: Colors.red),
-            const SizedBox(height: 16),
-            Text(
-              'Lỗi: $_error',
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.red),
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              onPressed: _loadSuggestions,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Thử lại'),
-            ),
-          ],
-        ),
-      );
-    }
-
-    if (_suggestedTasks.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.check_circle_outline, size: 64, color: Colors.green.shade400),
-            const SizedBox(height: 16),
-            Text(
-              'Tuyệt vời! 🎉',
-              style: GoogleFonts.inter(fontSize: 24, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Không có task nào cần ưu tiên',
-              style: GoogleFonts.inter(fontSize: 16, color: Colors.grey.shade600),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return RefreshIndicator(
-      onRefresh: _loadSuggestions,
-      child: Column(
-        children: [
-          // Header Info
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Colors.purple.shade600, Colors.purple.shade400],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '${_suggestedTasks.length} tasks cần chú ý',
-                  style: GoogleFonts.inter(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Được sắp xếp theo độ ưu tiên (AI Priority Score)',
-                  style: GoogleFonts.inter(
-                    fontSize: 13,
-                    color: Colors.white.withOpacity(0.9),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          
-          // Task List
-          Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: _suggestedTasks.length,
-              itemBuilder: (context, index) {
-                return _buildTaskCard(_suggestedTasks[index], index + 1);
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTaskCard(TaskModel task, int rank) {
-    final bool isOverdue = task.isOverdue;
-    final bool isHighPriority = task.isHighPriority;
-
-    return GestureDetector(
-      onTap: () async {
-        // CRITICAL FIX: Store result of Navigator.push and check mounted
-        await Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => TaskDetailScreen(
-              task: task,
-              currentUserRole: widget.currentUserRole,
-              currentUserId: widget.currentUserId,
-            ),
-          ),
-        );
-        
-        // Check mounted before calling refresh method
-        if (!mounted) return;
-        _loadSuggestions(); // Refresh after returning
-      },
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isOverdue ? Colors.red.shade300 : Colors.grey.shade200,
-            width: isOverdue ? 2 : 1,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Stack(
-          children: [
-            // Rank badge
-            Positioned(
-              top: 12,
-              left: 12,
-              child: Container(
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: rank <= 3
-                        ? [Colors.amber.shade400, Colors.orange.shade400]
-                        : [Colors.grey.shade400, Colors.grey.shade500],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: (rank <= 3 ? Colors.amber : Colors.grey).withOpacity(0.3),
-                      blurRadius: 4,
-                    ),
-                  ],
-                ),
-                child: Center(
-                  child: Text(
-                    '#$rank',
-                    style: GoogleFonts.inter(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            
-            // Content
-            Padding(
-              padding: const EdgeInsets.fromLTRB(56, 12, 12, 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Title
-                  Text(
-                    task.title,
-                    style: GoogleFonts.inter(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.grey.shade900,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  
-                  if (task.description != null && task.description!.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      task.description!,
-                      style: GoogleFonts.inter(
-                        fontSize: 13,
-                        color: Colors.grey.shade600,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                  
-                  const SizedBox(height: 12),
-                  
-                  // Priority Score - HIGHLIGHTED
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          Colors.purple.shade600,
-                          Colors.purple.shade400,
-                        ],
-                      ),
-                      borderRadius: BorderRadius.circular(12),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.purple.withOpacity(0.3),
-                          blurRadius: 6,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Icons.star,
-                          color: Colors.yellow,
-                          size: 18,
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          'AI Score: ${task.priorityScore.toStringAsFixed(1)}',
-                          style: GoogleFonts.inter(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  
-                  const SizedBox(height: 12),
-                  
-                  // Badges row
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      // Overdue badge
-                      if (isOverdue)
-                        _buildBadge(
-                          'Quá hạn!',
-                          Icons.warning_amber_rounded,
-                          Colors.red,
-                        ),
-                      
-                      // High Priority badge
-                      if (isHighPriority && !isOverdue)
-                        _buildBadge(
-                          'Ưu tiên cao',
-                          Icons.priority_high,
-                          Colors.orange,
-                        ),
-                      
-                      // Priority badge
-                      _buildBadge(
-                        task.priorityLabel,
-                        Icons.flag,
-                        _getPriorityColor(task.priority),
-                      ),
-                      
-                      // Status badge
-                      _buildBadge(
-                        task.statusLabel,
-                        Icons.circle,
-                        _getStatusColor(task.status),
-                      ),
-                    ],
-                  ),
-                  
-                  // Deadline
-                  if (task.deadline != null) ...[
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.access_time,
-                          size: 16,
-                          color: isOverdue ? Colors.red : Colors.grey.shade600,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Deadline: ${DateFormat('dd/MM/yyyy HH:mm', 'vi').format(task.deadline!)}',
-                          style: GoogleFonts.inter(
-                            fontSize: 13,
-                            color: isOverdue ? Colors.red : Colors.grey.shade700,
-                            fontWeight: isOverdue ? FontWeight.w600 : FontWeight.normal,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildBadge(String label, IconData icon, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.15),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withOpacity(0.3)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: color),
-          const SizedBox(width: 4),
-          Text(
-            label,
-            style: GoogleFonts.inter(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: color,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Color _getPriorityColor(String priority) {
-    switch (priority.toLowerCase()) {
-      case 'high':
-        return Colors.red;
-      case 'medium':
-        return Colors.orange;
-      default:
-        return Colors.green;
-    }
-  }
-
-  Color _getStatusColor(String status) {
-    switch (status.toLowerCase()) {
-      case 'completed':
-        return Colors.green;
-      case 'inprogress':
-        return Colors.blue;
-      case 'overdue':
-        return Colors.red;
-      default:
-        return Colors.grey;
-    }
   }
 }

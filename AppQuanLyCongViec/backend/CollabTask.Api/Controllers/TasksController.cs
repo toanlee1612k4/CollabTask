@@ -2,11 +2,13 @@ using CollabTask.Api.Data;
 using CollabTask.Api.Dtos.Tasks;
 using CollabTask.Api.Dtos.Comments; 
 using CollabTask.Api.Helpers;
+using CollabTask.Api.Hubs;
 using CollabTask.Api.Models; 
 using CollabTask.Api.Services.PriorityScoringService;
 using CollabTask.Api.Services.UserWeightService;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Task = CollabTask.Api.Models.Task;
 
@@ -20,15 +22,18 @@ namespace CollabTask.Api.Controllers
         private readonly CollabTaskDbContext _context;
         private readonly IPriorityScoringService _priorityScoringService;
         private readonly IUserWeightService _userWeightService;
+        private readonly INotificationService _notificationService;
 
         public TasksController(
             CollabTaskDbContext context, 
             IPriorityScoringService priorityScoringService,
-            IUserWeightService userWeightService)
+            IUserWeightService userWeightService,
+            INotificationService notificationService)
         {
             _context = context;
             _priorityScoringService = priorityScoringService;
             _userWeightService = userWeightService;
+            _notificationService = notificationService;
         }
         [HttpGet("suggested")]
         public async Task<ActionResult<List<TaskDto>>> GetSuggestedTasks()
@@ -414,83 +419,186 @@ namespace CollabTask.Api.Controllers
         }
 
         // POST: api/workspaces/{workspaceId}/tasks
+        /// <summary>
+        /// Tạo task mới trong workspace
+        /// BUSINESS RULES:
+        /// 1. Chỉ Owner/ProjectManager mới được tạo task VÀ assign cho người khác
+        /// 2. Member chỉ có thể tạo task tự assign cho chính mình
+        /// 3. Khi assign task → Tạo Notification cho người được gán
+        /// 4. Sau khi tạo → Invalidate AI suggestion cache
+        /// </summary>
         [HttpPost("workspaces/{workspaceId}/tasks")]
         public async Task<ActionResult<TaskDto>> CreateTask(Guid workspaceId, CreateTaskDto createDto)
         {
+            // 1. Validate user và lấy thông tin member
             var userId = User.GetUserId();
-            var isMember = await _context.WorkspaceMembers
-                .AnyAsync(wm => wm.WorkspaceID == workspaceId && wm.UserID == userId);
+            if (userId == Guid.Empty) return Unauthorized(new { message = "Invalid user token" });
 
-            if (!isMember) return Forbid();
+            var member = await _context.WorkspaceMembers
+                .FirstOrDefaultAsync(wm => wm.WorkspaceID == workspaceId && wm.UserID == userId);
 
-            var newTask = new Task
-            {
-                TaskID = Guid.NewGuid(),
-                WorkspaceID = workspaceId,
-                Title = createDto.Title,
-                Description = createDto.Description,
-                Status = "ToDo",
-                Priority = createDto.Priority,
-                Deadline = createDto.Deadline,
-                EstimatedTimeMinutes = createDto.EstimatedTimeMinutes,
-                CreatorUserID = userId,
-                CreatedAt = DateTime.UtcNow
-            };
-            _context.Tasks.Add(newTask);
+            if (member == null) 
+                return Forbid("Bạn không phải thành viên của workspace này");
 
-            // Xử lý gán người dùng
+            // 2. Lấy thông tin workspace để có tên workspace cho notification
+            var workspace = await _context.Workspaces
+                .AsNoTracking()
+                .FirstOrDefaultAsync(w => w.WorkspaceID == workspaceId);
+
+            if (workspace == null) 
+                return NotFound(new { message = "Workspace not found" });
+
+            // 3. Kiểm tra quyền tạo task
+            bool isOwnerOrPM = (workspace.OwnerUserID == userId || 
+                               member.Role == "Owner" || 
+                               member.Role == "ProjectManager");
+
+            // 4. Xử lý danh sách assignees theo quyền
             var assignees = new List<Guid>();
+            
             if (createDto.AssigneeUserIds != null && createDto.AssigneeUserIds.Any())
             {
-                // TODO: Kiểm tra xem các assignee có phải là member của workspace không
-                assignees.AddRange(createDto.AssigneeUserIds);
+                // Nếu có chỉ định assignees
+                if (!isOwnerOrPM)
+                {
+                    // Member chỉ được tự assign cho mình
+                    if (createDto.AssigneeUserIds.Count > 1 || 
+                        !createDto.AssigneeUserIds.Contains(userId))
+                    {
+                        return StatusCode(403, new { 
+                            message = "Members chỉ có thể tạo task và tự assign cho chính mình. Liên hệ Owner/PM để assign cho người khác." 
+                        });
+                    }
+                    assignees.Add(userId);
+                }
+                else
+                {
+                    // Owner/PM: Validate tất cả assignees phải là member của workspace
+                    foreach (var assigneeId in createDto.AssigneeUserIds)
+                    {
+                        var assigneeIsMember = await _context.WorkspaceMembers
+                            .AnyAsync(wm => wm.WorkspaceID == workspaceId && wm.UserID == assigneeId);
+                        
+                        if (!assigneeIsMember)
+                        {
+                            var user = await _context.Users.FindAsync(assigneeId);
+                            return BadRequest(new { 
+                                message = $"User '{user?.FullName ?? assigneeId.ToString()}' không phải là thành viên của workspace này" 
+                            });
+                        }
+                        assignees.Add(assigneeId);
+                    }
+                }
             }
             else
             {
-                assignees.Add(userId); // Tự động gán cho người tạo nếu không chọn ai
+                // Không chỉ định → tự assign cho người tạo
+                assignees.Add(userId);
             }
 
-            foreach (var assigneeId in assignees)
+            // 5. Sử dụng ExecutionStrategy để hỗ trợ retry với transaction
+            var strategy = _context.Database.CreateExecutionStrategy();
+            
+            TaskDto? taskDto = null;
+            
+            try
             {
-                _context.TaskAssignments.Add(new TaskAssignment
+                await strategy.ExecuteAsync(async () =>
                 {
-                    TaskID = newTask.TaskID,
-                    AssigneeUserID = assigneeId,
-                    AssignerUserID = userId, // Người tạo task là assigner
-                    Status = TaskAssignmentStatus.Pending,
-                    AssignedAt = DateTime.UtcNow
+                    using var transaction = await _context.Database.BeginTransactionAsync();
+                    
+                    // 6. Tạo Task
+                    var newTask = new Task
+                    {
+                        TaskID = Guid.NewGuid(),
+                        WorkspaceID = workspaceId,
+                        Title = createDto.Title,
+                        Description = createDto.Description,
+                        Status = "ToDo",
+                        Priority = createDto.Priority ?? "Medium",
+                        Deadline = createDto.Deadline,
+                        EstimatedTimeMinutes = createDto.EstimatedTimeMinutes,
+                        CreatorUserID = userId,
+                        CreatedAt = DateTime.UtcNow
+                    };
+                    _context.Tasks.Add(newTask);
+
+                    // 7. Tạo TaskAssignments + Notifications cho từng assignee
+                    foreach (var assigneeId in assignees)
+                    {
+                        // Tạo assignment
+                        _context.TaskAssignments.Add(new TaskAssignment
+                        {
+                            TaskID = newTask.TaskID,
+                            AssigneeUserID = assigneeId,
+                            AssignerUserID = userId,
+                            Status = TaskAssignmentStatus.Pending,
+                            AssignedAt = DateTime.UtcNow
+                        });
+
+                        // Tạo Notification (chỉ khi assign cho người khác, không phải tự assign)
+                        if (assigneeId != userId)
+                        {
+                            _context.Notifications.Add(new Notification
+                            {
+                                NotificationID = Guid.NewGuid(),
+                                UserID = assigneeId,
+                                Message = $"Bạn đã được gán công việc \"{newTask.Title}\" trong workspace \"{workspace.WorkspaceName}\"",
+                                RelatedEntityType = "Task",
+                                RelatedEntityID = newTask.TaskID,
+                                IsRead = false,
+                                CreatedAt = DateTime.UtcNow
+                            });
+                        }
+                    }
+
+                    // 8. Ghi Activity Log
+                    _context.ActivityLogs.Add(new ActivityLog
+                    {
+                        LogID = Guid.NewGuid(),
+                        UserID = userId,
+                        Action = $"đã tạo công việc: '{newTask.Title}'" + 
+                                 (assignees.Count > 1 || (assignees.Count == 1 && assignees[0] != userId) 
+                                     ? $" và gán cho {assignees.Count} người" 
+                                     : ""),
+                        EntityType = "Task",
+                        EntityID = newTask.TaskID,
+                        Timestamp = DateTime.UtcNow
+                    });
+
+                    // 9. Save tất cả trong 1 transaction
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    // 10. Invalidate AI suggestion cache cho tất cả assignees
+                    _priorityScoringService.InvalidateSuggestedTasksCacheForUsers(assignees);
+
+                    // 11. Build DTO
+                    taskDto = new TaskDto
+                    {
+                        TaskId = newTask.TaskID,
+                        WorkspaceId = newTask.WorkspaceID,
+                        Title = newTask.Title,
+                        Description = newTask.Description,
+                        Status = newTask.Status,
+                        Priority = newTask.Priority,
+                        Deadline = newTask.Deadline,
+                        EstimatedTimeMinutes = newTask.EstimatedTimeMinutes,
+                        CreatorUserId = newTask.CreatorUserID,
+                        CreatedAt = newTask.CreatedAt,
+                        AssigneeUserIds = assignees
+                    };
+                });
+                
+                return CreatedAtAction(nameof(GetTaskById), new { id = taskDto!.TaskId }, taskDto);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { 
+                    message = "Lỗi khi tạo task", 
+                    error = ex.InnerException?.Message ?? ex.Message 
                 });
             }
-
-            // Ghi Activity Log
-            _context.ActivityLogs.Add(new ActivityLog
-            {
-                LogID = Guid.NewGuid(),
-                UserID = userId,
-                Action = $"đã tạo công việc: '{newTask.Title}'",
-                EntityType = "Task",
-                EntityID = newTask.TaskID,
-                Timestamp = DateTime.UtcNow
-            });
-
-            await _context.SaveChangesAsync();
-
-            var taskDto = new TaskDto
-            {
-                TaskId = newTask.TaskID,
-                WorkspaceId = newTask.WorkspaceID,
-                Title = newTask.Title,
-                Description = newTask.Description,
-                Status = newTask.Status,
-                Priority = newTask.Priority,
-                Deadline = newTask.Deadline,
-                EstimatedTimeMinutes = newTask.EstimatedTimeMinutes,
-                CreatorUserId = newTask.CreatorUserID,
-                CreatedAt = newTask.CreatedAt,
-                AssigneeUserIds = assignees
-            };
-            
-            return CreatedAtAction(nameof(GetTaskById), new { id = taskDto.TaskId }, taskDto);
         }
 
         // PUT: api/tasks/{id}
@@ -706,6 +814,56 @@ namespace CollabTask.Api.Controllers
                 }
 
                 await _context.SaveChangesAsync();
+
+                // Invalidate AI suggestion cache cho tất cả assignees mới
+                _priorityScoringService.InvalidateSuggestedTasksCacheForUsers(
+                    createdAssignments.Select(a => a.AssigneeUserID));
+
+                // ===== SIGNALR: Gửi Real-time Notification =====
+                // Lấy thông tin workspace để có tên
+                var workspace = await _context.Workspaces
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(w => w.WorkspaceID == task.WorkspaceID);
+
+                var assigner = await _context.Users
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(u => u.UserID == userId);
+
+                foreach (var assignment in createdAssignments)
+                {
+                    // Gửi notification real-time đến từng assignee
+                    await _notificationService.SendToUserAsync(assignment.AssigneeUserID, new NotificationPayload
+                    {
+                        Type = "TaskAssigned",
+                        Message = $"Bạn được giao công việc: {task.Title}",
+                        TaskId = taskId,
+                        TaskTitle = task.Title,
+                        WorkspaceId = task.WorkspaceID,
+                        WorkspaceName = workspace?.WorkspaceName,
+                        ActorId = userId,
+                        ActorName = assigner?.FullName ?? assigner?.Email,
+                        CreatedAt = DateTime.UtcNow,
+                        Metadata = new Dictionary<string, object>
+                        {
+                            { "priority", task.Priority ?? "Medium" },
+                            { "deadline", task.Deadline?.ToString("o") ?? "" },
+                            { "assignmentStatus", "Pending" }
+                        }
+                    });
+                }
+
+                // Gửi update đến workspace channel (cho dashboard real-time)
+                await _notificationService.SendToWorkspaceAsync(task.WorkspaceID, new NotificationPayload
+                {
+                    Type = "TaskUpdated",
+                    Message = $"Task '{task.Title}' đã được gán cho {createdAssignments.Count} người",
+                    TaskId = taskId,
+                    TaskTitle = task.Title,
+                    WorkspaceId = task.WorkspaceID,
+                    ActorId = userId,
+                    ActorName = assigner?.FullName ?? assigner?.Email,
+                    CreatedAt = DateTime.UtcNow
+                });
 
                 return Ok(new { message = "Task assigned successfully", assignments = createdAssignments });
             }
@@ -1162,10 +1320,10 @@ namespace CollabTask.Api.Controllers
             }
 
              // Validate NewStatus
-             string[] allowedStatuses = { "ToDo", "InProgress", "InReview", "Done", "Canceled", "Rejected", "Overdue" };
+             string[] allowedStatuses = { "ToDo", "InProgress", "Review", "InReview", "Done", "Canceled", "Rejected", "Overdue" };
              if (!allowedStatuses.Contains(statusDto.NewStatus))
              {
-                 return BadRequest($"Invalid status value: {statusDto.NewStatus}.");
+                 return BadRequest($"Invalid status value: {statusDto.NewStatus}. Allowed: {string.Join(", ", allowedStatuses)}");
              }
             
             string oldStatus = task.Status;

@@ -38,14 +38,16 @@ namespace CollabTask.Api.Services.PriorityScoringService
             // 1. Lấy trọng số của người dùng (đã được cá nhân hóa)
             var userWeights = await _userWeightService.GetOrCreateUserWeights(userId);
 
-            // 2. Optimized query - chỉ lấy task chưa hoàn thành, không quá hạn, với AsNoTracking
+            // 2. Optimized query - lấy task chưa hoàn thành (BAO GỒM CẢ OVERDUE)
+            // QUAN TRỌNG: Không filter theo Deadline >= now để Bob có thể thấy task overdue
             var relevantStatuses = new[] { "ToDo", "InProgress", "Review" };
             var now = DateTime.UtcNow;
             var userTasks = await _context.Tasks
                 .AsNoTracking()
                 .Where(t => t.TaskAssignments.Any(ta => ta.AssigneeUserID == userId) 
-                         && relevantStatuses.Contains(t.Status)
-                         && (!t.Deadline.HasValue || t.Deadline.Value >= now))
+                         && relevantStatuses.Contains(t.Status))
+                // REMOVED: && (!t.Deadline.HasValue || t.Deadline.Value >= now)
+                // Lý do: Task overdue cần hiển thị với điểm ưu tiên CAO NHẤT
                 .Select(t => new 
                 {
                     Task = t,
@@ -160,12 +162,39 @@ namespace CollabTask.Api.Services.PriorityScoringService
 
             // Kích hoạt AI học từ hành vi người dùng
             await _userWeightService.LearnFromTaskCompletion(task, userId);
+            
+            // Invalidate cache sau khi hoàn thành task
+            InvalidateSuggestedTasksCache(userId);
+        }
+
+        /// <summary>
+        /// Xóa cache danh sách gợi ý của user để force recalculate
+        /// </summary>
+        public void InvalidateSuggestedTasksCache(Guid userId)
+        {
+            var cacheKey = $"suggested_tasks_{userId}";
+            _cache.Remove(cacheKey);
+        }
+
+        /// <summary>
+        /// Xóa cache danh sách gợi ý của nhiều users cùng lúc
+        /// </summary>
+        public void InvalidateSuggestedTasksCacheForUsers(IEnumerable<Guid> userIds)
+        {
+            foreach (var userId in userIds)
+            {
+                InvalidateSuggestedTasksCache(userId);
+            }
         }
 
         // =================================================================
         // HÀM HELPER TÍNH ĐIỂM
         // =================================================================
 
+        /// <summary>
+        /// Tính điểm deadline - OVERDUE tasks có điểm CAO NHẤT (1.2-1.5)
+        /// Logic: Càng quá hạn lâu → càng cần làm gấp → điểm càng cao
+        /// </summary>
         private decimal CalculateDeadlineScore(Task task, DateTime? completionTime = null)
         {
             if (task.Deadline == null)
@@ -174,20 +203,37 @@ namespace CollabTask.Api.Services.PriorityScoringService
             var checkTime = completionTime ?? DateTime.UtcNow;
             var daysRemaining = (task.Deadline.Value - checkTime).TotalDays;
 
-            if (daysRemaining < 0) return 0.0m;
-            if (daysRemaining < 1) return 1.0m;
-            if (daysRemaining < 2) return 0.9m;
-            if (daysRemaining < 3) return 0.8m;
-            if (daysRemaining < 7) return 0.7m;
-            if (daysRemaining < 14) return 0.5m;
+            // === OVERDUE BONUS: Task quá hạn cần ưu tiên cao nhất ===
+            if (daysRemaining < 0)
+            {
+                // Quá hạn > 7 ngày: Score = 1.5 (Cực kỳ nghiêm trọng)
+                if (daysRemaining < -7) return 1.5m;
+                // Quá hạn 3-7 ngày: Score = 1.4
+                if (daysRemaining < -3) return 1.4m;
+                // Quá hạn 1-3 ngày: Score = 1.3
+                if (daysRemaining < -1) return 1.3m;
+                // Quá hạn < 1 ngày (vài giờ): Score = 1.2
+                return 1.2m;
+            }
 
-            return 0.3m;
+            // === NORMAL: Task chưa quá hạn ===
+            if (daysRemaining < 1) return 1.0m;   // < 24h: Rất gấp
+            if (daysRemaining < 2) return 0.9m;   // 1-2 ngày
+            if (daysRemaining < 3) return 0.8m;   // 2-3 ngày
+            if (daysRemaining < 7) return 0.7m;   // 3-7 ngày
+            if (daysRemaining < 14) return 0.5m;  // 1-2 tuần
+
+            return 0.3m; // > 2 tuần: Không gấp
         }
 
+        /// <summary>
+        /// Tính điểm độ quan trọng - Hỗ trợ cả "Urgent" priority
+        /// </summary>
         private decimal CalculateImportanceScore(Task task)
         {
             switch (task.Priority?.ToLower())
             {
+                case "urgent": return 1.2m;  // Cao hơn High
                 case "high": return 1.0m;
                 case "medium": return 0.6m;
                 case "low": return 0.3m;
@@ -222,40 +268,55 @@ namespace CollabTask.Api.Services.PriorityScoringService
             string traitName = GetTraitDisplayName(trait);
             string reason;
 
+            // === KIỂM TRA OVERDUE TRƯỚC - ĐÂY LÀ ƯU TIÊN CAO NHẤT ===
+            var daysRemaining = task.Deadline.HasValue 
+                ? (task.Deadline.Value - DateTime.UtcNow).TotalDays 
+                : double.MaxValue;
+
+            if (daysRemaining < 0)
+            {
+                var overdueDays = Math.Abs(daysRemaining);
+                if (overdueDays >= 1)
+                {
+                    reason = $"🔴 CẢNH BÁO: Task này đã QUÁ HẠN {overdueDays:F0} ngày! Cần xử lý NGAY LẬP TỨC.";
+                }
+                else
+                {
+                    var overdueHours = overdueDays * 24;
+                    reason = $"🔴 CẢNH BÁO: Task này đã QUÁ HẠN {overdueHours:F0} giờ! Cần xử lý NGAY LẬP TỨC.";
+                }
+                return (reason, "⚠️ OVERDUE");
+            }
+
+            // === NORMAL FLOW: Dựa theo User Trait ===
             switch (trait)
             {
                 case UserTrait.Sprinter:
                     var minutes = task.EstimatedTimeMinutes ?? 0;
                     reason = minutes > 0 
-                        ? $"Task này được gợi ý vì bạn là '{traitName}' và task này chỉ tốn {minutes} phút (effort thấp)."
-                        : $"Task này được gợi ý vì bạn là '{traitName}' và thường ưu tiên task ngắn.";
+                        ? $"⚡ Gợi ý vì bạn thích việc nhanh - Task này chỉ tốn {minutes} phút."
+                        : $"⚡ Gợi ý vì bạn là '{traitName}' - thường ưu tiên task ngắn.";
                     break;
 
                 case UserTrait.Procrastinator:
-                    var daysRemaining = task.Deadline.HasValue 
-                        ? (task.Deadline.Value - DateTime.UtcNow).TotalDays 
-                        : double.MaxValue;
-                    
                     if (daysRemaining < 1)
-                        reason = $"Task này được gợi ý vì bạn là '{traitName}' và task này SẮP QUÁ HẠN trong {Math.Max(0, daysRemaining * 24):F1} giờ!";
+                        reason = $"🔥 GẤP: Task này SẮP QUÁ HẠN trong {Math.Max(0, daysRemaining * 24):F1} giờ!";
                     else if (daysRemaining < 3)
-                        reason = $"Task này được gợi ý vì bạn là '{traitName}' và task này còn {daysRemaining:F1} ngày (sát deadline).";
+                        reason = $"⏰ Gợi ý vì task này còn {daysRemaining:F1} ngày (sát deadline).";
                     else
-                        reason = $"Task này được gợi ý vì bạn là '{traitName}' và thường làm task sát deadline.";
+                        reason = $"📅 Gợi ý dựa trên deadline - phù hợp với phong cách của bạn.";
                     break;
 
                 case UserTrait.Planner:
                     var priority = task.Priority?.ToLower() ?? "medium";
-                    if (priority == "high")
-                        reason = $"Task này được gợi ý vì bạn là '{traitName}' và task này có độ ưu tiên CAO (quan trọng).";
-                    else if (priority == "medium")
-                        reason = $"Task này được gợi ý vì bạn là '{traitName}' và task này có độ ưu tiên TRUNG BÌNH.";
+                    if (priority == "urgent" || priority == "high")
+                        reason = $"🎯 Gợi ý vì đây là task quan trọng (Priority: {task.Priority}).";
                     else
-                        reason = $"Task này được gợi ý vì bạn là '{traitName}' và thường ưu tiên task quan trọng.";
+                        reason = $"📊 Gợi ý dựa trên độ ưu tiên - phù hợp với phong cách quy hoạch.";
                     break;
 
                 default: // Unknown
-                    reason = "Task này được gợi ý dựa trên thuật toán AI (chúng tôi đang học về phong cách làm việc của bạn).";
+                    reason = "🤖 Gợi ý dựa trên AI (đang học về phong cách làm việc của bạn).";
                     traitName = "Chưa xác định";
                     break;
             }

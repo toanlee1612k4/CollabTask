@@ -20,7 +20,7 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   bool _isLoading = true;
   String? _error;
-  
+
   UserModel? _currentUser;
   UserWeights? _userWeights;
   List<TaskModel> _suggestedTasks = [];
@@ -43,60 +43,101 @@ class _DashboardScreenState extends State<DashboardScreen> {
         apiClient.getCurrentUser(),
         apiClient.getUserWeights(),
         apiClient.getSuggestedTasks(), // AI suggested tasks only
-        apiClient.getUserStats(), // Get productivity stats including onTimeCompletionRate
+        apiClient
+            .getUserStats(), // Get productivity stats including onTimeCompletionRate
       ]);
 
       final user = futures[0] as UserModel;
       final weights = futures[1] as UserWeights?;
       var suggestedTasks = futures[2] as List<TaskModel>;
       final stats = futures[3] as Map<String, dynamic>;
-      
+
       if (kDebugMode) {
         print('\n📊 ========== DASHBOARD AI FILTER ==========');
-        print('📊 Suggested tasks received: ${suggestedTasks.length}');
+        print('📊 Current User: ${user.fullName} (ID: ${user.userId})');
+        print('📊 Suggested tasks received from API: ${suggestedTasks.length}');
+
+        // Debug: Log raw API response details
+        print('📋 [DEBUG] Raw task details:');
+        for (var i = 0; i < suggestedTasks.take(5).length; i++) {
+          final t = suggestedTasks[i];
+          print('   [$i] "${t.title}"');
+          print('       taskId: ${t.taskId}');
+          print('       workspaceId: ${t.workspaceId}');
+          print('       assigneeUserIds: ${t.assigneeUserIds}');
+          print('       priorityScore: ${t.priorityScore}');
+          print('       aiReason: ${t.aiReason ?? "N/A"}');
+        }
+
         print('📊 User stats:');
         print('   totalCompleted: ${stats['totalTasksCompleted']}');
         print('   onTimeRate: ${stats['onTimeCompletionRate']}%');
         print('   currentStreak: ${stats['currentStreak']}');
       }
-      
+
+      // ========== AI SUGGESTIONS LOGIC ==========
+      // Hiển thị TẤT CẢ tasks được AI gợi ý trong workspaces của user
+      // Bao gồm cả tasks chưa assign (để user có thể nhận việc)
+      // và tasks assign cho người khác (để theo dõi tiến độ team)
+      // Backend AI endpoint đã filter theo workspaces của user
+      if (kDebugMode) {
+        print(
+          '📊 [AI SUGGESTIONS] Showing all ${suggestedTasks.length} AI-suggested tasks',
+        );
+        print(
+          '   (Includes: unassigned tasks, your tasks, team tasks in your workspaces)',
+        );
+      }
+
       // Filter logic: Remove overdue tasks for high-performing users
       // If user has good on-time completion rate (>70%), don't show overdue tasks
       final onTimeRate = (stats['onTimeCompletionRate'] ?? 0.0) / 100.0;
-      
+
       if (kDebugMode) {
         print('📊 Checking overdue tasks:');
         final overdueTasks = suggestedTasks.where((t) => t.isOverdue).toList();
         print('   Overdue count: ${overdueTasks.length}');
         if (overdueTasks.isNotEmpty) {
-          print('   Sample overdue: ${overdueTasks.take(2).map((t) => "${t.title} (deadline: ${t.deadline})").toList()}');
+          print(
+            '   Sample overdue: ${overdueTasks.take(2).map((t) => "${t.title} (deadline: ${t.deadline})").toList()}',
+          );
         }
       }
-      
+
       if (onTimeRate > 0.7) {
         final beforeFilter = suggestedTasks.length;
-        suggestedTasks = suggestedTasks.where((task) => !task.isOverdue).toList();
+        suggestedTasks = suggestedTasks
+            .where((task) => !task.isOverdue)
+            .toList();
         if (kDebugMode) {
-          print('🎯 User is high-performer (${(onTimeRate * 100).toInt()}% on-time)');
-          print('🎯 Filtered out ${beforeFilter - suggestedTasks.length} overdue tasks');
+          print(
+            '🎯 User is high-performer (${(onTimeRate * 100).toInt()}% on-time)',
+          );
+          print(
+            '🎯 Filtered out ${beforeFilter - suggestedTasks.length} overdue tasks',
+          );
           print('📊 Final suggested tasks: ${suggestedTasks.length}');
           if (suggestedTasks.isNotEmpty) {
             print('📋 Sample tasks after filter:');
             for (var i = 0; i < suggestedTasks.take(3).length; i++) {
               final t = suggestedTasks[i];
               print('   [$i] "${t.title}"');
-              print('       priority=${t.priority}, score=${t.priorityScore.toInt()}, deadline=${t.deadline}');
+              print(
+                '       priority=${t.priority}, score=${t.priorityScore.toInt()}, deadline=${t.deadline}',
+              );
             }
           }
         }
       } else if (kDebugMode) {
-        print('📊 User on-time rate ${(onTimeRate * 100).toInt()}% < 70%, showing all ${suggestedTasks.length} tasks');
+        print(
+          '📊 User on-time rate ${(onTimeRate * 100).toInt()}% < 70%, showing all ${suggestedTasks.length} tasks',
+        );
       }
-      
+
       if (kDebugMode) {
         print('========================================\n');
       }
-      
+
       setState(() {
         _currentUser = user;
         _userWeights = weights;
@@ -117,7 +158,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> _completeTask(TaskModel task) async {
     try {
       await apiClient.completeTask(task.taskId);
-      
+
       // Show success message
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -142,7 +183,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
         );
       }
-      
+
       // Reload data to reflect changes
       _loadDashboardData();
     } catch (e) {
@@ -164,7 +205,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       setState(() {
         _userWeights = newWeights;
       });
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -197,28 +238,113 @@ class _DashboardScreenState extends State<DashboardScreen> {
           slivers: [
             _buildSliverAppBar(),
             if (_isLoading)
-              SliverFillRemaining(
-                child: _buildLoadingState(),
-              )
+              SliverFillRemaining(child: _buildLoadingState())
             else if (_error != null)
-              SliverFillRemaining(
-                child: _buildErrorState(),
-              )
+              SliverFillRemaining(child: _buildErrorState())
             else ...[
               SliverToBoxAdapter(child: _buildAIStatsSection()),
+              // NOTE: Đã xóa Add Task Card vì task bắt buộc phải thuộc workspace
+              // Để tạo task, user cần vào workspace cụ thể
               SliverToBoxAdapter(child: _buildTasksHeader()),
               _buildTasksList(),
             ],
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showCreateTaskDialog(),
-        icon: const Icon(Icons.add),
-        label: const Text('Tạo Task'),
-        backgroundColor: Colors.indigo.shade600,
-        foregroundColor: Colors.white,
-      ),
+      // Đã chuyển sang card trong danh sách, bỏ FAB cũ
+    );
+  }
+
+  /// 🎨 NHIỆM VỤ 2: Modern Add Task Card với Gradient, Shadow, Rounded
+  Widget _buildAddTaskCard() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      child: InkWell(
+        onTap: () => _showCreateTaskDialog(),
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Colors.deepPurple.shade500,
+                Colors.indigo.shade600,
+                Colors.blue.shade500,
+              ],
+            ),
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.indigo.shade300.withOpacity(0.5),
+                blurRadius: 20,
+                offset: const Offset(0, 8),
+              ),
+              BoxShadow(
+                color: Colors.deepPurple.shade200.withOpacity(0.3),
+                blurRadius: 10,
+                offset: const Offset(-5, 5),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              // Icon dấu cộng lớn
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Icon(
+                  Icons.add_rounded,
+                  size: 32,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(width: 16),
+              // Text
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Thêm công việc mới',
+                      style: GoogleFonts.inter(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Tạo task cá nhân để AI gợi ý cho bạn',
+                      style: GoogleFonts.inter(
+                        fontSize: 13,
+                        color: Colors.white.withOpacity(0.85),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Arrow icon
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.arrow_forward_rounded,
+                  size: 20,
+                  color: Colors.white,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ).animate().fadeIn(duration: 400.ms).slideY(begin: -0.1, end: 0),
     );
   }
 
@@ -312,22 +438,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 try {
                   // Get workspaces first
                   final workspaces = await apiClient.getWorkspaces();
-                  
+
                   if (workspaces.isEmpty) {
                     if (ctx.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Vui lòng tạo workspace trước!')),
+                        const SnackBar(
+                          content: Text('Vui lòng tạo workspace trước!'),
+                        ),
                       );
                     }
                     return;
                   }
-                  
+
                   // Use first workspace (or let user select if needed)
                   final workspaceId = workspaces.first.workspaceId;
-                  
+
                   await apiClient.createTask(workspaceId, {
                     'title': titleController.text,
-                    'description': descController.text.isEmpty ? null : descController.text,
+                    'description': descController.text.isEmpty
+                        ? null
+                        : descController.text,
                     'priority': selectedPriority,
                     'status': 'ToDo', // CRITICAL: Backend requires status field
                     'deadline': selectedDeadline?.toIso8601String(),
@@ -389,7 +519,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         radius: 24,
                         backgroundColor: Colors.white.withOpacity(0.2),
                         child: Text(
-                          _currentUser?.fullName?.substring(0, 1).toUpperCase() ?? 'U',
+                          _currentUser?.fullName
+                                  ?.substring(0, 1)
+                                  .toUpperCase() ??
+                              'U',
                           style: GoogleFonts.inter(
                             fontSize: 20,
                             fontWeight: FontWeight.w700,
@@ -447,9 +580,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildAIStatsSection() {
     if (_userWeights == null) return const SizedBox.shrink();
-    
+
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.sm,
+      ),
       child: AIStatsChart(
         weights: _userWeights!,
         onTap: () {
@@ -464,11 +600,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
         children: [
-          Icon(
-            Icons.psychology,
-            color: Colors.indigo.shade600,
-            size: 24,
-          ),
+          Icon(Icons.psychology, color: Colors.indigo.shade600, size: 24),
           const SizedBox(width: 8),
           Text(
             'AI Suggested Tasks',
@@ -511,33 +643,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
 
     return SliverList(
-      delegate: SliverChildBuilderDelegate(
-        (context, index) {
-          final task = _suggestedTasks[index];
-          return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            child: SmartTaskCard(
-              task: task,
-              onTap: () {
-                if (_currentUser != null) {
-                  TaskNavigationHelper.navigateToTaskDetail(
-                    context: context,
+      delegate: SliverChildBuilderDelegate((context, index) {
+        final task = _suggestedTasks[index];
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          child:
+              SmartTaskCard(
                     task: task,
-                    currentUserRole: 'Member',
-                    currentUserId: _currentUser!.userId,
-                  ).then((_) => _loadDashboardData());
-                }
-              },
-              onComplete: () => _completeTask(task),
-            ).animate(delay: (index * 100).ms).fadeIn().slideY(begin: 0.1, end: 0),
-          );
-        },
-        childCount: _suggestedTasks.length,
-      ),
+                    onTap: () {
+                      if (_currentUser != null) {
+                        TaskNavigationHelper.navigateToTaskDetail(
+                          context: context,
+                          task: task,
+                          currentUserRole: 'Member',
+                          currentUserId: _currentUser!.userId,
+                        ).then((_) => _loadDashboardData());
+                      }
+                    },
+                    onComplete: () => _completeTask(task),
+                  )
+                  .animate(delay: (index * 100).ms)
+                  .fadeIn()
+                  .slideY(begin: 0.1, end: 0),
+        );
+      }, childCount: _suggestedTasks.length),
     );
   }
-
-
 
   Widget _buildEmptyState(String title, String subtitle, IconData icon) {
     return Center(
@@ -552,11 +683,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 color: Colors.grey.shade100,
                 borderRadius: BorderRadius.circular(24),
               ),
-              child: Icon(
-                icon,
-                size: 48,
-                color: Colors.grey.shade400,
-              ),
+              child: Icon(icon, size: 48, color: Colors.grey.shade400),
             ),
             const SizedBox(height: 16),
             Text(
@@ -594,10 +721,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           const SizedBox(height: 16),
           Text(
             'Đang tải dữ liệu...',
-            style: GoogleFonts.inter(
-              fontSize: 16,
-              color: Colors.grey.shade600,
-            ),
+            style: GoogleFonts.inter(fontSize: 16, color: Colors.grey.shade600),
           ),
         ],
       ),
@@ -611,11 +735,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.error_outline,
-              size: 64,
-              color: Colors.red.shade300,
-            ),
+            Icon(Icons.error_outline, size: 64, color: Colors.red.shade300),
             const SizedBox(height: 16),
             Text(
               'Có lỗi xảy ra',
@@ -640,16 +760,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.indigo.shade600,
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),
               child: Text(
                 'Thử lại',
-                style: GoogleFonts.inter(
-                  fontWeight: FontWeight.w600,
-                ),
+                style: GoogleFonts.inter(fontWeight: FontWeight.w600),
               ),
             ),
           ],
@@ -660,13 +781,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   void _showAIStatsDialog() {
     if (_userWeights == null) return;
-    
+
     showDialog(
       context: context,
       builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         child: Container(
           constraints: const BoxConstraints(maxWidth: 400, maxHeight: 600),
           child: AiStatsChart(

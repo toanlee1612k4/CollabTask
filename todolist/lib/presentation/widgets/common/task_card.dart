@@ -31,100 +31,177 @@ class TaskCard extends StatelessWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
       ),
+      clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
         child: Container(
-          padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
             gradient: _getCardGradient(),
-            border: task.isOverdue 
-                ? Border.all(color: Colors.red.shade300, width: 2)
-                : null,
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: Row(
             children: [
-              // Header với AI Score và Priority
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      task.title,
-                      style: GoogleFonts.inter(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                        color: task.status == 'Completed' 
-                            ? Colors.grey.shade600 
-                            : Colors.grey.shade800,
-                        decoration: task.status == 'Completed' 
-                            ? TextDecoration.lineThrough 
-                            : null,
-                      ),
-                    ),
+              // ✅ LEFT BORDER - Màu theo trạng thái
+              Container(
+                width: 5,
+                decoration: BoxDecoration(
+                  color: _getLeftBorderColor(),
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(16),
+                    bottomLeft: Radius.circular(16),
                   ),
-                  const SizedBox(width: 8),
-                  _buildAIScoreBadge(),
-                ],
-              ),
-              
-              const SizedBox(height: 8),
-              
-              // Description (nếu có)
-              if (task.description != null && task.description!.isNotEmpty) ...[
-                Text(
-                  task.description!,
-                  style: GoogleFonts.inter(
-                    fontSize: 14,
-                    color: Colors.grey.shade600,
-                    height: 1.4,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 12),
-              ],
-              
-              // Status và Priority badges
-              Row(
-                children: [
-                  _buildStatusBadge(),
-                  const SizedBox(width: 8),
-                  _buildPriorityBadge(),
-                  const Spacer(),
-                  if (task.estimatedTimeMinutes != null)
-                    _buildTimeEstimate(),
-                ],
               ),
-              
-              const SizedBox(height: 12),
-              
-              // Assignment info (nếu có)
-              if (assigneeCount != null && assigneeCount! > 0) ...[
-                _buildAssignmentInfo(),
-                const SizedBox(height: 12),
-              ],
-              
-              // Deadline và Complete button
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildDeadlineInfo(),
+              // Main content
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // ✅ AI Suggested Badge (nếu có)
+                      if (task.isAiSuggested && task.priorityScore >= 7.0) ...[
+                        _buildAiSuggestedBadge(),
+                        const SizedBox(height: 8),
+                      ],
+                      // Header với AI Score và Priority
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              task.title,
+                              style: GoogleFonts.inter(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w600,
+                                color: task.status == 'Completed' 
+                                    ? Colors.grey.shade600 
+                                    : Colors.grey.shade800,
+                                decoration: task.status == 'Completed' 
+                                    ? TextDecoration.lineThrough 
+                                    : null,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          _buildAIScoreBadge(),
+                        ],
+                      ),
+                      
+                      const SizedBox(height: 8),
+                      
+                      // Description (nếu có)
+                      if (task.description != null && task.description!.isNotEmpty) ...[
+                        Text(
+                          task.description!,
+                          style: GoogleFonts.inter(
+                            fontSize: 14,
+                            color: Colors.grey.shade600,
+                            height: 1.4,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+                      
+                      // Status và Priority badges
+                      Row(
+                        children: [
+                          _buildStatusBadge(),
+                          const SizedBox(width: 8),
+                          _buildPriorityBadge(),
+                          const Spacer(),
+                          if (task.estimatedTimeMinutes != null)
+                            _buildTimeEstimate(),
+                        ],
+                      ),
+                      
+                      const SizedBox(height: 12),
+                      
+                      // Assignment info (nếu có)
+                      if (assigneeCount != null && assigneeCount! > 0) ...[
+                        _buildAssignmentInfo(),
+                        const SizedBox(height: 12),
+                      ],
+                      
+                      // Deadline và Complete button
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildDeadlineInfo(),
+                          ),
+                          if (showCompleteButton && 
+                              task.status != 'Completed' && 
+                              onComplete != null) ...[
+                            const SizedBox(width: 12),
+                            _buildCompleteButton(),
+                          ],
+                        ],
+                      ),
+                    ],
                   ),
-                  if (showCompleteButton && 
-                      task.status != 'Completed' && 
-                      onComplete != null) ...[
-                    const SizedBox(width: 12),
-                    _buildCompleteButton(),
-                  ],
-                ],
+                ),
               ),
             ],
           ),
         ),
       ),
     ).animate().fadeIn(duration: 300.ms).slideX(begin: 0.2, end: 0);
+  }
+
+  // ✅ NEW: Màu left border theo trạng thái
+  Color _getLeftBorderColor() {
+    if (task.isOverdue) {
+      return Colors.red.shade600;
+    }
+    if (task.status.toLowerCase() == 'completed') {
+      return Colors.green.shade600;
+    }
+    if (task.isAiSuggested && task.priorityScore >= 7.0) {
+      return Colors.purple.shade600;
+    }
+    if (task.isHighPriority) {
+      return Colors.amber.shade600;
+    }
+    return Colors.blue.shade400;
+  }
+
+  // ✅ NEW: AI Suggested Badge
+  Widget _buildAiSuggestedBadge() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Colors.purple.shade400, Colors.deepPurple.shade500],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.purple.withOpacity(0.3),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text('✨', style: TextStyle(fontSize: 12)),
+          const SizedBox(width: 4),
+          Text(
+            'Gợi ý cho bạn',
+            style: GoogleFonts.inter(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    ).animate()
+      .fadeIn(duration: 300.ms)
+      .shimmer(duration: 2000.ms, color: Colors.white.withOpacity(0.3));
   }
 
   Widget _buildAIScoreBadge() {

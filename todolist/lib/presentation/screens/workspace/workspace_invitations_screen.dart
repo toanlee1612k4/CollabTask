@@ -54,31 +54,46 @@ class _WorkspaceInvitationsScreenState extends State<WorkspaceInvitationsScreen>
     final invitationId = invitation['invitationID'] as String?;
     if (invitationId == null) return;
 
+    // ✅ OPTIMISTIC UPDATE: Xóa item khỏi UI ngay lập tức
+    final workspaceName = invitation['workspaceName'] as String? ?? 'workspace';
+    final removedIndex = _invitations.indexWhere(
+      (inv) => inv['invitationID'] == invitationId
+    );
+    final removedInvitation = Map<String, dynamic>.from(invitation);
+    
+    setState(() {
+      _invitations.removeWhere((inv) => inv['invitationID'] == invitationId);
+    });
+
     try {
-      // Accept invitation using new backend endpoint
+      // Accept invitation using backend endpoint
       final result = await _apiClient.acceptWorkspaceInvitation(invitationId);
 
-      // CRITICAL FIX: Check mounted AFTER await before using context
       if (!mounted) return;
       
-      final workspaceName = result['workspace']?['name'] ?? 'workspace';
+      final actualWorkspaceName = result['workspace']?['name'] ?? workspaceName;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Đã tham gia $workspaceName! Xem trong Workspaces.'),
+          content: Text('🎉 Đã tham gia "$actualWorkspaceName"! Xem trong Workspaces.'),
           backgroundColor: Colors.green,
           duration: const Duration(seconds: 3),
         ),
       );
-      
-      // Reload invitation list to remove accepted invitation
-      await _loadInvitations();
     } catch (e) {
-      // CRITICAL FIX: Check mounted AFTER await before using context
+      // ✅ ROLLBACK: Nếu API fail, thêm lại item vào list
       if (!mounted) return;
+      
+      setState(() {
+        if (removedIndex >= 0 && removedIndex <= _invitations.length) {
+          _invitations.insert(removedIndex, removedInvitation);
+        } else {
+          _invitations.add(removedInvitation);
+        }
+      });
       
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Lỗi khi chấp nhận lời mời: $e'),
+          content: Text('❌ Không thể chấp nhận lời mời: $e'),
           backgroundColor: Colors.red,
         ),
       );
@@ -89,11 +104,20 @@ class _WorkspaceInvitationsScreenState extends State<WorkspaceInvitationsScreen>
     final invitationId = invitation['invitationID'] as String?;
     if (invitationId == null) return;
 
+    // ✅ OPTIMISTIC UPDATE: Xóa item khỏi UI ngay lập tức
+    final removedIndex = _invitations.indexWhere(
+      (inv) => inv['invitationID'] == invitationId
+    );
+    final removedInvitation = Map<String, dynamic>.from(invitation);
+    
+    setState(() {
+      _invitations.removeWhere((inv) => inv['invitationID'] == invitationId);
+    });
+
     try {
-      // Reject invitation using new backend endpoint
+      // Reject invitation using backend endpoint
       await _apiClient.rejectWorkspaceInvitation(invitationId);
 
-      // CRITICAL FIX: Check mounted AFTER await before using context
       if (!mounted) return;
       
       ScaffoldMessenger.of(context).showSnackBar(
@@ -103,16 +127,21 @@ class _WorkspaceInvitationsScreenState extends State<WorkspaceInvitationsScreen>
           duration: Duration(seconds: 2),
         ),
       );
-      
-      // Reload lại danh sách
-      await _loadInvitations();
     } catch (e) {
-      // CRITICAL FIX: Check mounted AFTER await before using context
+      // ✅ ROLLBACK: Nếu API fail, thêm lại item vào list
       if (!mounted) return;
+      
+      setState(() {
+        if (removedIndex >= 0 && removedIndex <= _invitations.length) {
+          _invitations.insert(removedIndex, removedInvitation);
+        } else {
+          _invitations.add(removedInvitation);
+        }
+      });
       
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Lỗi khi từ chối lời mời: $e'),
+          content: Text('❌ Không thể từ chối lời mời: $e'),
           backgroundColor: Colors.red,
         ),
       );

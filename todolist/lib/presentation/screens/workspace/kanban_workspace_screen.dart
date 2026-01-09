@@ -27,11 +27,11 @@ class KanbanWorkspaceScreen extends StatefulWidget {
 
 class _KanbanWorkspaceScreenState extends State<KanbanWorkspaceScreen> {
   final ApiClient _apiClient = ApiClient();
-  
+
   bool _isLoading = true;
   String? _error;
   String? _userRole; // Cache user role
-  
+
   List<TaskModel> _todoTasks = [];
   List<TaskModel> _inProgressTasks = [];
   List<TaskModel> _reviewTasks = [];
@@ -63,7 +63,7 @@ class _KanbanWorkspaceScreenState extends State<KanbanWorkspaceScreen> {
       });
       return;
     }
-    
+
     setState(() {
       _isLoading = true;
       _error = null;
@@ -74,27 +74,32 @@ class _KanbanWorkspaceScreenState extends State<KanbanWorkspaceScreen> {
         print('\n🚀 ========== LOADING WORKSPACE ==========');
         print('🚀 Workspace ID: ${widget.workspaceId}');
       }
-      
+
       // Get current user from AuthProvider
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
       final currentUserId = authProvider.currentUser?.userId;
-      
+
       if (kDebugMode) {
         print('🚀 Current User ID: ${currentUserId ?? "null"}');
         print('🚀 Starting API calls...');
       }
-      
+
       // Load tasks and members
       final futures = <Future>[
         _apiClient.getTasksByWorkspace(widget.workspaceId),
         _apiClient.getWorkspaceMembers(widget.workspaceId),
       ];
-      
+
       // Only load user role if we have userId (avoid double slash bug)
       if (currentUserId != null && currentUserId.isNotEmpty) {
-        futures.add(_apiClient.workspaceRole.getUserRole(widget.workspaceId, currentUserId));
+        futures.add(
+          _apiClient.workspaceRole.getUserRole(
+            widget.workspaceId,
+            currentUserId,
+          ),
+        );
       }
-      
+
       final results = await Future.wait(futures);
 
       final tasks = results[0] as List<TaskModel>;
@@ -104,12 +109,16 @@ class _KanbanWorkspaceScreenState extends State<KanbanWorkspaceScreen> {
       if (kDebugMode) {
         print('\n📋 ========== KANBAN LOADING ==========');
         print('📋 Total tasks loaded: ${tasks.length}');
-        print('📋 All task statuses: ${tasks.map((t) => t.status).toSet().toList()}');
+        print(
+          '📋 All task statuses: ${tasks.map((t) => t.status).toSet().toList()}',
+        );
         print('📋 Sample tasks (first 3):');
         for (var i = 0; i < tasks.take(3).length; i++) {
           final t = tasks[i];
           print('   [$i] "${t.title}"');
-          print('       status="${t.status}" (lowercase: "${t.status.toLowerCase()}")');
+          print(
+            '       status="${t.status}" (lowercase: "${t.status.toLowerCase()}")',
+          );
           print('       priority=${t.priority}, deadline=${t.deadline}');
         }
       }
@@ -117,43 +126,73 @@ class _KanbanWorkspaceScreenState extends State<KanbanWorkspaceScreen> {
       if (mounted) {
         setState(() {
           // Case-insensitive status matching to handle backend variations
-          _todoTasks = tasks.where((t) => t.status.toLowerCase() == 'todo').toList();
-          _inProgressTasks = tasks.where((t) => 
-            t.status.toLowerCase() == 'inprogress' || 
-            t.status.toLowerCase() == 'in progress'
-          ).toList();
-          _reviewTasks = tasks.where((t) => t.status.toLowerCase() == 'review').toList();
-          _doneTasks = tasks.where((t) => 
-            t.status.toLowerCase() == 'done' || 
-            t.status.toLowerCase() == 'completed'
-          ).toList();
+          _todoTasks = tasks
+              .where((t) => t.status.toLowerCase() == 'todo')
+              .toList();
+          _inProgressTasks = tasks
+              .where(
+                (t) =>
+                    t.status.toLowerCase() == 'inprogress' ||
+                    t.status.toLowerCase() == 'in progress',
+              )
+              .toList();
+          // CRITICAL FIX: Review column includes both 'review' and 'waitingforapproval'
+          // Backend có thể trả về status khác nhau: Review hoặc WaitingForApproval
+          _reviewTasks = tasks.where((t) {
+            final status = t.status.toLowerCase();
+            return status == 'review' ||
+                status == 'waitingforapproval' ||
+                status == 'waiting for approval';
+          }).toList();
+          _doneTasks = tasks
+              .where(
+                (t) =>
+                    t.status.toLowerCase() == 'done' ||
+                    t.status.toLowerCase() == 'completed',
+              )
+              .toList();
           _members = members;
-          
+
           if (kDebugMode) {
             print('\n📊 ========== KANBAN FILTER RESULTS ==========');
             print('📊 ToDo: ${_todoTasks.length} tasks');
             if (_todoTasks.isNotEmpty) {
-              print('   Sample: ${_todoTasks.take(2).map((t) => t.title).toList()}');
+              print(
+                '   Sample: ${_todoTasks.take(2).map((t) => t.title).toList()}',
+              );
             }
             print('📊 InProgress: ${_inProgressTasks.length} tasks');
             if (_inProgressTasks.isNotEmpty) {
-              print('   Sample: ${_inProgressTasks.take(2).map((t) => t.title).toList()}');
+              print(
+                '   Sample: ${_inProgressTasks.take(2).map((t) => t.title).toList()}',
+              );
             }
             print('📊 Review: ${_reviewTasks.length} tasks');
             print('📊 Done: ${_doneTasks.length} tasks');
-            
-            final totalFiltered = _todoTasks.length + _inProgressTasks.length + _reviewTasks.length + _doneTasks.length;
+
+            final totalFiltered =
+                _todoTasks.length +
+                _inProgressTasks.length +
+                _reviewTasks.length +
+                _doneTasks.length;
             if (totalFiltered != tasks.length) {
-              print('⚠️ WARNING: ${tasks.length - totalFiltered} tasks NOT matched to any column!');
-              final unmatched = tasks.where((t) => 
-                t.status.toLowerCase() != 'todo' &&
-                t.status.toLowerCase() != 'inprogress' &&
-                t.status.toLowerCase() != 'in progress' &&
-                t.status.toLowerCase() != 'review' &&
-                t.status.toLowerCase() != 'done' &&
-                t.status.toLowerCase() != 'completed'
-              ).toList();
-              print('⚠️ Unmatched statuses: ${unmatched.map((t) => t.status).toSet().toList()}');
+              print(
+                '⚠️ WARNING: ${tasks.length - totalFiltered} tasks NOT matched to any column!',
+              );
+              final unmatched = tasks.where((t) {
+                final status = t.status.toLowerCase();
+                return status != 'todo' &&
+                    status != 'inprogress' &&
+                    status != 'in progress' &&
+                    status != 'review' &&
+                    status != 'waitingforapproval' &&
+                    status != 'waiting for approval' &&
+                    status != 'done' &&
+                    status != 'completed';
+              }).toList();
+              print(
+                '⚠️ Unmatched statuses: ${unmatched.map((t) => t.status).toSet().toList()}',
+              );
             }
             print('========================================\n');
           }
@@ -171,20 +210,22 @@ class _KanbanWorkspaceScreenState extends State<KanbanWorkspaceScreen> {
         }
         print('========================================\n');
       }
-      
+
       if (mounted) {
         setState(() {
           // Parse error for user-friendly message
           String errorMsg = e.toString();
           if (errorMsg.contains('400')) {
-            _error = 'Invalid request. Please check workspace ID or try again later.';
+            _error =
+                'Invalid request. Please check workspace ID or try again later.';
           } else if (errorMsg.contains('401') || errorMsg.contains('403')) {
             _error = 'You do not have permission to access this workspace.';
           } else if (errorMsg.contains('404')) {
             _error = 'Workspace not found.';
           } else if (errorMsg.contains('500')) {
             _error = 'Server error. Please try again later.';
-          } else if (errorMsg.contains('network') || errorMsg.contains('connect')) {
+          } else if (errorMsg.contains('network') ||
+              errorMsg.contains('connect')) {
             _error = 'Network error. Please check your connection.';
           } else {
             _error = 'An error occurred. Please try again.';
@@ -203,9 +244,7 @@ class _KanbanWorkspaceScreenState extends State<KanbanWorkspaceScreen> {
         children: [
           _buildHeader(),
           if (_isLoading)
-            const Expanded(
-              child: Center(child: CircularProgressIndicator()),
-            )
+            const Expanded(child: Center(child: CircularProgressIndicator()))
           else if (_error != null)
             Expanded(
               child: Center(
@@ -214,7 +253,11 @@ class _KanbanWorkspaceScreenState extends State<KanbanWorkspaceScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.error_outline_rounded, size: 80, color: AppColors.error),
+                      Icon(
+                        Icons.error_outline_rounded,
+                        size: 80,
+                        color: AppColors.error,
+                      ),
                       const SizedBox(height: AppSpacing.lg),
                       Text(
                         'Oops!',
@@ -397,11 +440,7 @@ class _KanbanWorkspaceScreenState extends State<KanbanWorkspaceScreen> {
             style: BorderStyle.solid,
           ),
         ),
-        child: Icon(
-          Icons.add,
-          color: AppColors.primary,
-          size: 20,
-        ),
+        child: Icon(Icons.add, color: AppColors.primary, size: 20),
       ),
     );
   }
@@ -410,7 +449,7 @@ class _KanbanWorkspaceScreenState extends State<KanbanWorkspaceScreen> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final isMobile = constraints.maxWidth < AppBreakpoints.mobile;
-        
+
         if (isMobile) {
           return _buildMobileKanban();
         } else {
@@ -424,13 +463,33 @@ class _KanbanWorkspaceScreenState extends State<KanbanWorkspaceScreen> {
     return ListView(
       padding: const EdgeInsets.all(AppSpacing.md),
       children: [
-        _buildKanbanColumn('TO DO', _todoTasks, AppColors.todoColor, Icons.inbox_rounded),
+        _buildKanbanColumn(
+          'TO DO',
+          _todoTasks,
+          AppColors.todoColor,
+          Icons.inbox_rounded,
+        ),
         const SizedBox(height: AppSpacing.md),
-        _buildKanbanColumn('IN PROGRESS', _inProgressTasks, AppColors.inProgressColor, Icons.play_circle_rounded),
+        _buildKanbanColumn(
+          'IN PROGRESS',
+          _inProgressTasks,
+          AppColors.inProgressColor,
+          Icons.play_circle_rounded,
+        ),
         const SizedBox(height: AppSpacing.md),
-        _buildKanbanColumn('REVIEW', _reviewTasks, AppColors.codeReviewColor, Icons.rate_review_rounded),
+        _buildKanbanColumn(
+          'REVIEW',
+          _reviewTasks,
+          AppColors.codeReviewColor,
+          Icons.rate_review_rounded,
+        ),
         const SizedBox(height: AppSpacing.md),
-        _buildKanbanColumn('DONE', _doneTasks, AppColors.doneColor, Icons.check_circle_rounded),
+        _buildKanbanColumn(
+          'DONE',
+          _doneTasks,
+          AppColors.doneColor,
+          Icons.check_circle_rounded,
+        ),
       ],
     );
   }
@@ -441,19 +500,52 @@ class _KanbanWorkspaceScreenState extends State<KanbanWorkspaceScreen> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(child: _buildKanbanColumn('TO DO', _todoTasks, AppColors.todoColor, Icons.inbox_rounded)),
+          Expanded(
+            child: _buildKanbanColumn(
+              'TO DO',
+              _todoTasks,
+              AppColors.todoColor,
+              Icons.inbox_rounded,
+            ),
+          ),
           const SizedBox(width: AppSpacing.md),
-          Expanded(child: _buildKanbanColumn('IN PROGRESS', _inProgressTasks, AppColors.inProgressColor, Icons.play_circle_rounded)),
+          Expanded(
+            child: _buildKanbanColumn(
+              'IN PROGRESS',
+              _inProgressTasks,
+              AppColors.inProgressColor,
+              Icons.play_circle_rounded,
+            ),
+          ),
           const SizedBox(width: AppSpacing.md),
-          Expanded(child: _buildKanbanColumn('REVIEW', _reviewTasks, AppColors.codeReviewColor, Icons.rate_review_rounded)),
+          Expanded(
+            child: _buildKanbanColumn(
+              'REVIEW',
+              _reviewTasks,
+              AppColors.codeReviewColor,
+              Icons.rate_review_rounded,
+            ),
+          ),
           const SizedBox(width: AppSpacing.md),
-          Expanded(child: _buildKanbanColumn('DONE', _doneTasks, AppColors.doneColor, Icons.check_circle_rounded)),
+          Expanded(
+            child: _buildKanbanColumn(
+              'DONE',
+              _doneTasks,
+              AppColors.doneColor,
+              Icons.check_circle_rounded,
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildKanbanColumn(String title, List<TaskModel> tasks, Color color, IconData icon) {
+  Widget _buildKanbanColumn(
+    String title,
+    List<TaskModel> tasks,
+    Color color,
+    IconData icon,
+  ) {
     return Container(
       constraints: const BoxConstraints(minHeight: 500),
       decoration: BoxDecoration(
@@ -527,17 +619,20 @@ class _KanbanWorkspaceScreenState extends State<KanbanWorkspaceScreen> {
       elevation: AppElevation.low,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadius.sm),
-        side: BorderSide(
-          color: columnColor.withOpacity(0.3),
-        ),
+        side: BorderSide(color: columnColor.withOpacity(0.3)),
       ),
       child: InkWell(
-        onTap: () {
+        onTap: () async {
           // Navigate to enhanced task detail with real user data
-          final authProvider = Provider.of<AuthProvider>(context, listen: false);
+          final authProvider = Provider.of<AuthProvider>(
+            context,
+            listen: false,
+          );
           final currentUserId = authProvider.currentUser?.userId ?? '';
-          
-          Navigator.push(
+
+          // CRITICAL FIX: Await navigation and refresh data when returning
+          // Đợi navigation hoàn tất rồi refresh để cập nhật Kanban
+          await Navigator.push(
             context,
             MaterialPageRoute(
               builder: (context) => EnhancedTaskDetailScreen(
@@ -547,6 +642,12 @@ class _KanbanWorkspaceScreenState extends State<KanbanWorkspaceScreen> {
               ),
             ),
           );
+
+          // Refresh Kanban data when user comes back from task detail
+          // Điều này đảm bảo UI luôn sync với database
+          if (mounted) {
+            _loadWorkspaceData();
+          }
         },
         borderRadius: BorderRadius.circular(AppRadius.sm),
         child: Padding(
@@ -587,14 +688,18 @@ class _KanbanWorkspaceScreenState extends State<KanbanWorkspaceScreen> {
                         Icon(
                           Icons.schedule_rounded,
                           size: 12,
-                          color: task.isOverdue ? AppColors.error : AppColors.textHint,
+                          color: task.isOverdue
+                              ? AppColors.error
+                              : AppColors.textHint,
                         ),
                         const SizedBox(width: 4),
                         Text(
                           '${task.deadline!.day}/${task.deadline!.month}',
                           style: GoogleFonts.inter(
                             fontSize: 11,
-                            color: task.isOverdue ? AppColors.error : AppColors.textHint,
+                            color: task.isOverdue
+                                ? AppColors.error
+                                : AppColors.textHint,
                           ),
                         ),
                       ],
@@ -629,10 +734,7 @@ class _KanbanWorkspaceScreenState extends State<KanbanWorkspaceScreen> {
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 6,
-        vertical: 2,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
         color: color.withOpacity(0.1),
         borderRadius: BorderRadius.circular(4),
@@ -742,7 +844,7 @@ class _AddMemberDialogState extends State<AddMemberDialog> {
 
   Future<void> _sendInvite() async {
     final email = _emailController.text.trim();
-    
+
     if (email.isEmpty) {
       setState(() => _error = 'Please enter an email');
       return;
@@ -761,18 +863,20 @@ class _AddMemberDialogState extends State<AddMemberDialog> {
     try {
       // Send invitation using new backend endpoint
       await _apiClient.sendWorkspaceInvitation(
-        widget.workspaceId, 
+        widget.workspaceId,
         email,
         message: 'Mời bạn tham gia làm việc cùng team!',
       );
-      
+
       // CRITICAL FIX: Check mounted AFTER await before using context/Navigator
       if (!mounted) return;
-      
+
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('✅ Đã gửi lời mời tới $email!\nUser sẽ nhận được thông báo và có thể chấp nhận lời mời.'),
+          content: Text(
+            '✅ Đã gửi lời mời tới $email!\nUser sẽ nhận được thông báo và có thể chấp nhận lời mời.',
+          ),
           backgroundColor: AppColors.success,
           duration: const Duration(seconds: 3),
         ),
@@ -780,18 +884,22 @@ class _AddMemberDialogState extends State<AddMemberDialog> {
     } catch (e) {
       // CRITICAL FIX: Check mounted AFTER await before using context/setState
       if (!mounted) return;
-      
+
       setState(() {
         // Parse error message for user-friendly display
         String errorMsg = e.toString();
-        if (errorMsg.contains('does not exist') || errorMsg.contains('not found')) {
-          errorMsg = '❌ Email này chưa đăng ký tài khoản.\nVui lòng yêu cầu user đăng ký trước khi gửi lời mời.';
+        if (errorMsg.contains('does not exist') ||
+            errorMsg.contains('not found')) {
+          errorMsg =
+              '❌ Email này chưa đăng ký tài khoản.\nVui lòng yêu cầu user đăng ký trước khi gửi lời mời.';
         } else if (errorMsg.contains('already a member')) {
           errorMsg = '⚠️ User đã là thành viên của workspace này rồi.';
         } else if (errorMsg.contains('already has a pending invitation')) {
           errorMsg = '⚠️ Đã có lời mời đang chờ duyệt cho email này.';
-        } else if (errorMsg.contains('Only Owner or ProjectManager') || errorMsg.contains('permission')) {
-          errorMsg = '🚫 Chỉ Owner hoặc Project Manager mới có quyền gửi lời mời.';
+        } else if (errorMsg.contains('Only Owner or ProjectManager') ||
+            errorMsg.contains('permission')) {
+          errorMsg =
+              '🚫 Chỉ Owner hoặc Project Manager mới có quyền gửi lời mời.';
         }
         _error = errorMsg;
         _isLoading = false;
@@ -856,7 +964,7 @@ class _AddMemberDialogState extends State<AddMemberDialog> {
               ],
             ),
             const SizedBox(height: AppSpacing.lg),
-            
+
             // Info box
             Container(
               padding: const EdgeInsets.all(12),
@@ -882,7 +990,7 @@ class _AddMemberDialogState extends State<AddMemberDialog> {
               ),
             ),
             const SizedBox(height: AppSpacing.md),
-            
+
             TextField(
               controller: _emailController,
               decoration: InputDecoration(
@@ -904,17 +1012,11 @@ class _AddMemberDialogState extends State<AddMemberDialog> {
               decoration: BoxDecoration(
                 color: AppColors.info.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(AppRadius.sm),
-                border: Border.all(
-                  color: AppColors.info.withOpacity(0.3),
-                ),
+                border: Border.all(color: AppColors.info.withOpacity(0.3)),
               ),
               child: Row(
                 children: [
-                  Icon(
-                    Icons.info_outline,
-                    size: 20,
-                    color: AppColors.info,
-                  ),
+                  Icon(Icons.info_outline, size: 20, color: AppColors.info),
                   const SizedBox(width: AppSpacing.sm),
                   Expanded(
                     child: Text(
@@ -953,7 +1055,9 @@ class _AddMemberDialogState extends State<AddMemberDialog> {
                           height: 20,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Colors.white,
+                            ),
                           ),
                         )
                       : const Text('Send Invitation'),

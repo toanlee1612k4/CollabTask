@@ -56,19 +56,32 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   Future<void> _markAsRead(String notificationId) async {
     try {
-      await _apiClient.dio.patch('/api/notifications/$notificationId/read');
-      await _loadNotifications();
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Đã đánh dấu đã đọc')),
-        );
-      }
+      // ✅ FIX: Sử dụng PUT (đúng API) thay vì PATCH
+      await _apiClient.dio.put('/api/notifications/$notificationId/read');
+      
+      // ✅ Optimistic update - cập nhật local state ngay lập tức
+      setState(() {
+        final index = _notifications.indexWhere((n) => n.notificationId == notificationId);
+        if (index != -1) {
+          // Tạo bản copy với isRead = true
+          final notification = _notifications[index];
+          _notifications[index] = NotificationModel(
+            notificationId: notification.notificationId,
+            title: notification.title,
+            message: notification.message,
+            type: notification.type,
+            isRead: true,
+            createdAt: notification.createdAt,
+            relatedTaskId: notification.relatedTaskId,
+            relatedWorkspaceId: notification.relatedWorkspaceId,
+          );
+        }
+      });
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Lỗi: $e'),
+            content: Text('Lỗi đánh dấu đã đọc: $e'),
             backgroundColor: AppColors.error,
           ),
         );
@@ -123,20 +136,42 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 
   Future<void> _deleteNotification(String notificationId) async {
+    // ✅ Optimistic update - xóa khỏi list local ngay lập tức
+    final deletedNotification = _notifications.firstWhere(
+      (n) => n.notificationId == notificationId,
+      orElse: () => _notifications.first, // fallback
+    );
+    final deletedIndex = _notifications.indexWhere((n) => n.notificationId == notificationId);
+    
+    setState(() {
+      _notifications.removeWhere((n) => n.notificationId == notificationId);
+    });
+
     try {
       await _apiClient.dio.delete('/api/notifications/$notificationId');
-      await _loadNotifications();
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Đã xóa thông báo')),
+          const SnackBar(
+            content: Text('Đã xóa thông báo'),
+            backgroundColor: Colors.green,
+          ),
         );
       }
     } catch (e) {
+      // ✅ Rollback nếu API fail - thêm lại item vào list
       if (mounted) {
+        setState(() {
+          if (deletedIndex >= 0 && deletedIndex <= _notifications.length) {
+            _notifications.insert(deletedIndex, deletedNotification);
+          } else {
+            _notifications.add(deletedNotification);
+          }
+        });
+        
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Lỗi: $e'),
+            content: Text('Không thể xóa thông báo: $e'),
             backgroundColor: AppColors.error,
           ),
         );

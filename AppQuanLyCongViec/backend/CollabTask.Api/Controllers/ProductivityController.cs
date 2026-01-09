@@ -385,6 +385,7 @@ namespace CollabTask.Api.Controllers
                 // ⚡ PERFORMANCE: Add AsNoTracking()
                 var relevantStatuses = new[] { "ToDo", "InProgress", "Review" };
                 
+                // Lấy task kèm danh sách assignees
                 var assignedTasks = await _context.TaskAssignments
                     .AsNoTracking()
                     .Where(ta => ta.AssigneeUserID == userId
@@ -392,6 +393,7 @@ namespace CollabTask.Api.Controllers
                             || ta.Status == Models.TaskAssignmentStatus.InProgress
                             || ta.Status == Models.TaskAssignmentStatus.Pending))
                     .Include(ta => ta.Task)
+                        .ThenInclude(t => t.TaskAssignments)
                     .Where(ta => relevantStatuses.Contains(ta.Task.Status))
                     .Select(ta => new
                     {
@@ -404,6 +406,8 @@ namespace CollabTask.Api.Controllers
                         Status = ta.Task.Status,
                         WorkspaceId = ta.Task.WorkspaceID,
                         AssignmentStatus = ta.Status.ToString(),
+                        // ✅ FIX: Include AssigneeUserIds từ TaskAssignments
+                        AssigneeUserIds = ta.Task.TaskAssignments.Select(x => x.AssigneeUserID).ToList(),
                         // AI Scoring:
                         // Priority: High=3, Medium=2, Low=1
                         // Deadline: Càng gần càng cao điểm (max 5 points)
@@ -432,6 +436,7 @@ namespace CollabTask.Api.Controllers
                         t.Status,
                         t.WorkspaceId,
                         t.AssignmentStatus,
+                        t.AssigneeUserIds, // ✅ FIX: Include in response
                         SuggestionScore = t.PriorityScore + t.DeadlineScore + t.StatusScore,
                         Reason = GetSuggestionReason(t.Deadline, t.Priority, t.Status, now)
                     })

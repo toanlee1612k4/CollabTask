@@ -8,6 +8,7 @@ using CollabTask.Api.Services.PriorityScoringService;
 using CollabTask.Api.Services.UserWeightService;
 using CollabTask.Api.Services.DatabaseSeeder;
 using CollabTask.Api.Services.BackgroundServices;
+using CollabTask.Api.Hubs;
 using CollabTask.Api.Helpers;
 using CollabTask.Api.Middleware;
 using Microsoft.OpenApi.Models;
@@ -100,16 +101,28 @@ try
     // Add Authorization
     builder.Services.AddAuthorization();
 
-    // Add CORS
+    // Add CORS - Updated for SignalR
     builder.Services.AddCors(options =>
     {
         options.AddPolicy("AllowAll", policy =>
         {
-            policy.AllowAnyOrigin()
+            policy.SetIsOriginAllowed(_ => true) // Allow any origin for SignalR
                   .AllowAnyMethod()
-                  .AllowAnyHeader();
+                  .AllowAnyHeader()
+                  .AllowCredentials(); // Required for SignalR
         });
     });
+
+    // ===== SIGNALR CONFIGURATION =====
+    builder.Services.AddSignalR(options =>
+    {
+        options.EnableDetailedErrors = builder.Environment.IsDevelopment();
+        options.KeepAliveInterval = TimeSpan.FromSeconds(15);
+        options.ClientTimeoutInterval = TimeSpan.FromSeconds(30);
+    });
+    
+    // Register NotificationService for DI
+    builder.Services.AddScoped<INotificationService, NotificationService>();
 
     builder.Services.AddMemoryCache(options =>
     {
@@ -154,6 +167,9 @@ try
     app.UseAuthorization();
 
     app.MapControllers();
+    
+    // ===== MAP SIGNALR HUB =====
+    app.MapHub<NotificationHub>("/notificationHub");
 
     // Apply any pending migrations and verify database connection
     try

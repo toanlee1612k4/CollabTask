@@ -12,7 +12,8 @@ class EnhancedTaskDetailScreen extends StatefulWidget {
   final String taskId;
   final String currentUserId;
   final String userRole; // Owner, ProjectManager, Member
-  final int? initialTab; // 0=Info, 1=Comments, 2=Tags - for navigation from notifications
+  final int?
+  initialTab; // 0=Info, 1=Comments, 2=Tags - for navigation from notifications
 
   const EnhancedTaskDetailScreen({
     super.key,
@@ -23,14 +24,15 @@ class EnhancedTaskDetailScreen extends StatefulWidget {
   });
 
   @override
-  State<EnhancedTaskDetailScreen> createState() => _EnhancedTaskDetailScreenState();
+  State<EnhancedTaskDetailScreen> createState() =>
+      _EnhancedTaskDetailScreenState();
 }
 
-class _EnhancedTaskDetailScreenState extends State<EnhancedTaskDetailScreen> 
+class _EnhancedTaskDetailScreenState extends State<EnhancedTaskDetailScreen>
     with SingleTickerProviderStateMixin {
   final ApiClient _apiClient = ApiClient();
   late TabController _tabController;
-  
+
   TaskModel? _task;
   String? _workspaceName; // NEW: Workspace name
   List<dynamic> _comments = []; // Will use CommentModel from API
@@ -44,7 +46,7 @@ class _EnhancedTaskDetailScreenState extends State<EnhancedTaskDetailScreen>
   void initState() {
     super.initState();
     _tabController = TabController(
-      length: 3, 
+      length: 3,
       vsync: this,
       initialIndex: widget.initialTab ?? 0, // Navigate to specific tab
     );
@@ -67,22 +69,26 @@ class _EnhancedTaskDetailScreenState extends State<EnhancedTaskDetailScreen>
     try {
       // Load task details
       final task = await _apiClient.getTaskById(widget.taskId);
-      
+
       // Load workspace name if task belongs to workspace
       String? workspaceName;
       if (task.workspaceId != null && task.workspaceId!.isNotEmpty) {
         try {
-          final workspace = await _apiClient.getWorkspaceById(task.workspaceId!);
+          final workspace = await _apiClient.getWorkspaceById(
+            task.workspaceId!,
+          );
           workspaceName = workspace.name;
         } catch (e) {
           print('⚠️ Could not load workspace name: $e');
         }
       }
-      
+
       // Load comments (API available per API-STATUS-REPORT.md)
       List<dynamic> commentsData = [];
       try {
-        final comments = await _apiClient.dio.get('/api/tasks/${widget.taskId}/comments');
+        final comments = await _apiClient.dio.get(
+          '/api/tasks/${widget.taskId}/comments',
+        );
         commentsData = comments.data as List;
         print('📝 Comments loaded: ${commentsData.length} comments');
         if (commentsData.isNotEmpty) {
@@ -92,11 +98,13 @@ class _EnhancedTaskDetailScreenState extends State<EnhancedTaskDetailScreen>
         print('⚠️ Comments endpoint error: $e');
         // Continue with empty comments
       }
-      
+
       // Load tags (Section 7 of API docs) - handle 404 if not implemented
       List<dynamic> tagsData = [];
       try {
-        final tags = await _apiClient.dio.get('/api/tasks/${widget.taskId}/tags');
+        final tags = await _apiClient.dio.get(
+          '/api/tasks/${widget.taskId}/tags',
+        );
         tagsData = tags.data as List;
       } catch (e) {
         print('⚠️ Tags endpoint not available: $e');
@@ -126,7 +134,8 @@ class _EnhancedTaskDetailScreenState extends State<EnhancedTaskDetailScreen>
   bool get _isOwner => widget.userRole == 'Owner';
   bool get _isProjectManager => widget.userRole == 'ProjectManager';
   bool get _canApprove => _isOwner || _isProjectManager;
-  bool get _isAssignee => _task?.assigneeUserIds.contains(widget.currentUserId) ?? false;
+  bool get _isAssignee =>
+      _task?.assigneeUserIds.contains(widget.currentUserId) ?? false;
 
   @override
   Widget build(BuildContext context) {
@@ -136,8 +145,8 @@ class _EnhancedTaskDetailScreenState extends State<EnhancedTaskDetailScreen>
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
-              ? _buildErrorState()
-              : _buildContent(),
+          ? _buildErrorState()
+          : _buildContent(),
       bottomNavigationBar: _buildBottomActions(),
     );
   }
@@ -229,10 +238,7 @@ class _EnhancedTaskDetailScreenState extends State<EnhancedTaskDetailScreen>
             ],
           ],
         ),
-        IconButton(
-          icon: const Icon(Icons.refresh),
-          onPressed: _loadTaskData,
-        ),
+        IconButton(icon: const Icon(Icons.refresh), onPressed: _loadTaskData),
       ],
       bottom: TabBar(
         controller: _tabController,
@@ -288,11 +294,7 @@ class _EnhancedTaskDetailScreenState extends State<EnhancedTaskDetailScreen>
   Widget _buildContent() {
     return TabBarView(
       controller: _tabController,
-      children: [
-        _buildInfoTab(),
-        _buildCommentsTab(),
-        _buildTagsTab(),
-      ],
+      children: [_buildInfoTab(), _buildCommentsTab(), _buildTagsTab()],
     );
   }
 
@@ -325,7 +327,8 @@ class _EnhancedTaskDetailScreenState extends State<EnhancedTaskDetailScreen>
                     _buildPriorityChip(_task!.priority),
                   ],
                 ),
-                if (_task!.description != null && _task!.description!.isNotEmpty) ...[
+                if (_task!.description != null &&
+                    _task!.description!.isNotEmpty) ...[
                   const SizedBox(height: AppSpacing.sm),
                   Text(
                     _task!.description!,
@@ -387,7 +390,9 @@ class _EnhancedTaskDetailScreenState extends State<EnhancedTaskDetailScreen>
                           Icon(
                             Icons.schedule_rounded,
                             size: 16,
-                            color: _task!.isOverdue ? AppColors.error : AppColors.textSecondary,
+                            color: _task!.isOverdue
+                                ? AppColors.error
+                                : AppColors.textSecondary,
                           ),
                           const SizedBox(width: 4),
                           Text(
@@ -397,7 +402,9 @@ class _EnhancedTaskDetailScreenState extends State<EnhancedTaskDetailScreen>
                             style: GoogleFonts.inter(
                               fontSize: AppTypography.bodyMedium,
                               fontWeight: FontWeight.w600,
-                              color: _task!.isOverdue ? AppColors.error : AppColors.textPrimary,
+                              color: _task!.isOverdue
+                                  ? AppColors.error
+                                  : AppColors.textPrimary,
                             ),
                           ),
                         ],
@@ -465,7 +472,9 @@ class _EnhancedTaskDetailScreenState extends State<EnhancedTaskDetailScreen>
                   ),
                 ] else
                   Padding(
-                    padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+                    padding: const EdgeInsets.symmetric(
+                      vertical: AppSpacing.sm,
+                    ),
                     child: Text(
                       'Chưa có người thực hiện',
                       style: GoogleFonts.inter(
@@ -498,7 +507,9 @@ class _EnhancedTaskDetailScreenState extends State<EnhancedTaskDetailScreen>
                 ),
                 const SizedBox(height: AppSpacing.sm),
                 Text(
-                  _canApprove ? 'Bạn có thể chuyển sang bất kỳ trạng thái nào' : 'Bạn có thể chuyển sang Đang làm hoặc Review',
+                  _canApprove
+                      ? 'Bạn có thể chuyển sang bất kỳ trạng thái nào'
+                      : 'Bạn có thể chuyển sang Đang làm hoặc Review',
                   style: GoogleFonts.inter(
                     fontSize: AppTypography.bodySmall,
                     color: AppColors.textSecondary,
@@ -510,11 +521,31 @@ class _EnhancedTaskDetailScreenState extends State<EnhancedTaskDetailScreen>
                   runSpacing: 8,
                   children: [
                     if (_canApprove)
-                      _buildStatusButton('ToDo', 'Chưa làm', Icons.radio_button_unchecked, AppColors.textHint),
-                    _buildStatusButton('InProgress', 'Đang làm', Icons.pending, AppColors.info),
-                    _buildStatusButton('Review', 'Review', Icons.rate_review, AppColors.warning),
+                      _buildStatusButton(
+                        'ToDo',
+                        'Chưa làm',
+                        Icons.radio_button_unchecked,
+                        AppColors.textHint,
+                      ),
+                    _buildStatusButton(
+                      'InProgress',
+                      'Đang làm',
+                      Icons.pending,
+                      AppColors.info,
+                    ),
+                    _buildStatusButton(
+                      'Review',
+                      'Review',
+                      Icons.rate_review,
+                      AppColors.warning,
+                    ),
                     if (_canApprove)
-                      _buildStatusButton('Done', 'Hoàn thành', Icons.check_circle, AppColors.success),
+                      _buildStatusButton(
+                        'Done',
+                        'Hoàn thành',
+                        Icons.check_circle,
+                        AppColors.success,
+                      ),
                   ],
                 ),
               ],
@@ -525,7 +556,8 @@ class _EnhancedTaskDetailScreenState extends State<EnhancedTaskDetailScreen>
         const SizedBox(height: AppSpacing.sm),
 
         // Complete Task Button - Show for assignees and owners/PM
-        if ((_isAssignee || _canApprove) && _task!.status.toLowerCase() != 'done')
+        if ((_isAssignee || _canApprove) &&
+            _task!.status.toLowerCase() != 'done')
           Card(
             color: AppColors.success.withOpacity(0.1),
             child: InkWell(
@@ -535,7 +567,11 @@ class _EnhancedTaskDetailScreenState extends State<EnhancedTaskDetailScreen>
                 padding: const EdgeInsets.all(AppSpacing.md),
                 child: Row(
                   children: [
-                    Icon(Icons.check_circle_rounded, color: AppColors.success, size: 28),
+                    Icon(
+                      Icons.check_circle_rounded,
+                      color: AppColors.success,
+                      size: 28,
+                    ),
                     const SizedBox(width: AppSpacing.md),
                     Expanded(
                       child: Column(
@@ -559,7 +595,11 @@ class _EnhancedTaskDetailScreenState extends State<EnhancedTaskDetailScreen>
                         ],
                       ),
                     ),
-                    Icon(Icons.arrow_forward_ios_rounded, color: AppColors.success, size: 16),
+                    Icon(
+                      Icons.arrow_forward_ios_rounded,
+                      color: AppColors.success,
+                      size: 16,
+                    ),
                   ],
                 ),
               ),
@@ -576,7 +616,11 @@ class _EnhancedTaskDetailScreenState extends State<EnhancedTaskDetailScreen>
               children: [
                 Row(
                   children: [
-                    Icon(Icons.attach_file, size: 20, color: AppColors.textHint),
+                    Icon(
+                      Icons.attach_file,
+                      size: 20,
+                      color: AppColors.textHint,
+                    ),
                     const SizedBox(width: 8),
                     Text(
                       'File đính kèm',
@@ -613,7 +657,11 @@ class _EnhancedTaskDetailScreenState extends State<EnhancedTaskDetailScreen>
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.chat_bubble_outline, size: 64, color: Colors.grey.shade300),
+                      Icon(
+                        Icons.chat_bubble_outline,
+                        size: 64,
+                        color: Colors.grey.shade300,
+                      ),
                       const SizedBox(height: AppSpacing.md),
                       Text(
                         'Chưa có bình luận nào',
@@ -730,9 +778,7 @@ class _EnhancedTaskDetailScreenState extends State<EnhancedTaskDetailScreen>
       padding: const EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
         color: Colors.white,
-        border: Border(
-          top: BorderSide(color: Colors.grey.shade300),
-        ),
+        border: Border(top: BorderSide(color: Colors.grey.shade300)),
       ),
       child: Row(
         children: [
@@ -777,17 +823,14 @@ class _EnhancedTaskDetailScreenState extends State<EnhancedTaskDetailScreen>
       await _loadTaskData();
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Đã thêm bình luận')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Đã thêm bình luận')));
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Lỗi: $e'),
-            backgroundColor: AppColors.error,
-          ),
+          SnackBar(content: Text('Lỗi: $e'), backgroundColor: AppColors.error),
         );
       }
     }
@@ -795,16 +838,14 @@ class _EnhancedTaskDetailScreenState extends State<EnhancedTaskDetailScreen>
 
   Future<void> _editComment(dynamic commentId, String currentText) async {
     final controller = TextEditingController(text: currentText);
-    
+
     final newText = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Sửa bình luận'),
         content: TextField(
           controller: controller,
-          decoration: const InputDecoration(
-            hintText: 'Nhập nội dung mới...',
-          ),
+          decoration: const InputDecoration(hintText: 'Nhập nội dung mới...'),
           maxLines: null,
           autofocus: true,
         ),
@@ -873,9 +914,9 @@ class _EnhancedTaskDetailScreenState extends State<EnhancedTaskDetailScreen>
         await _loadTaskData();
 
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Đã xóa bình luận')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('Đã xóa bình luận')));
         }
       } catch (e) {
         if (mounted) {
@@ -920,7 +961,8 @@ class _EnhancedTaskDetailScreenState extends State<EnhancedTaskDetailScreen>
                         spacing: 8,
                         runSpacing: 8,
                         children: _tags.map((tag) {
-                          final tagName = tag['tagName'] ?? tag['name'] ?? 'Tag';
+                          final tagName =
+                              tag['tagName'] ?? tag['name'] ?? 'Tag';
                           final tagColor = tag['color'] ?? '#6C63FF';
                           final tagId = tag['tagId'] ?? tag['id'];
 
@@ -933,7 +975,11 @@ class _EnhancedTaskDetailScreenState extends State<EnhancedTaskDetailScreen>
                                 fontWeight: FontWeight.w500,
                               ),
                             ),
-                            deleteIcon: const Icon(Icons.close, size: 18, color: Colors.white70),
+                            deleteIcon: const Icon(
+                              Icons.close,
+                              size: 18,
+                              color: Colors.white70,
+                            ),
                             onDeleted: () => _removeTag(tagId),
                           );
                         }).toList(),
@@ -966,9 +1012,9 @@ class _EnhancedTaskDetailScreenState extends State<EnhancedTaskDetailScreen>
 
   Future<void> _showAddTagDialog() async {
     // TODO: Fetch available tags from workspace and show selection dialog
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Tag management coming soon')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Tag management coming soon')));
   }
 
   Future<void> _removeTag(dynamic tagId) async {
@@ -977,17 +1023,14 @@ class _EnhancedTaskDetailScreenState extends State<EnhancedTaskDetailScreen>
       await _loadTaskData();
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Đã gỡ nhãn')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Đã gỡ nhãn')));
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Lỗi: $e'),
-            backgroundColor: AppColors.error,
-          ),
+          SnackBar(content: Text('Lỗi: $e'), backgroundColor: AppColors.error),
         );
       }
     }
@@ -1045,7 +1088,8 @@ class _EnhancedTaskDetailScreenState extends State<EnhancedTaskDetailScreen>
 
           // Owner/PM actions
           if (_canApprove) ...[
-            if (status == 'waitingforapproval' || status == 'waiting for approval')
+            if (status == 'waitingforapproval' ||
+                status == 'waiting for approval')
               Expanded(
                 child: ElevatedButton.icon(
                   onPressed: () => _approveTask(),
@@ -1057,7 +1101,8 @@ class _EnhancedTaskDetailScreenState extends State<EnhancedTaskDetailScreen>
                   ),
                 ),
               ),
-            if (status == 'waitingforapproval' || status == 'waiting for approval') ...[
+            if (status == 'waitingforapproval' ||
+                status == 'waiting for approval') ...[
               const SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: OutlinedButton.icon(
@@ -1100,10 +1145,7 @@ class _EnhancedTaskDetailScreenState extends State<EnhancedTaskDetailScreen>
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Lỗi: $e'),
-            backgroundColor: AppColors.error,
-          ),
+          SnackBar(content: Text('Lỗi: $e'), backgroundColor: AppColors.error),
         );
       }
     }
@@ -1162,10 +1204,7 @@ class _EnhancedTaskDetailScreenState extends State<EnhancedTaskDetailScreen>
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 12,
-        vertical: 4,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       decoration: BoxDecoration(
         color: color.withOpacity(0.2),
         borderRadius: BorderRadius.circular(AppRadius.full),
@@ -1236,8 +1275,14 @@ class _EnhancedTaskDetailScreenState extends State<EnhancedTaskDetailScreen>
 
   // TASK MANAGEMENT METHODS
 
-  Widget _buildStatusButton(String status, String label, IconData icon, Color color) {
-    final isCurrentStatus = _task?.status == status;
+  Widget _buildStatusButton(
+    String status,
+    String label,
+    IconData icon,
+    Color color,
+  ) {
+    // So sánh không phân biệt hoa thường
+    final isCurrentStatus = _task?.status.toLowerCase() == status.toLowerCase();
 
     return ActionChip(
       label: Row(
@@ -1276,7 +1321,9 @@ class _EnhancedTaskDetailScreenState extends State<EnhancedTaskDetailScreen>
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Xóa task'),
-        content: const Text('Bạn có chắc muốn xóa task này? Hành động này không thể hoàn tác.'),
+        content: const Text(
+          'Bạn có chắc muốn xóa task này? Hành động này không thể hoàn tác.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -1297,17 +1344,14 @@ class _EnhancedTaskDetailScreenState extends State<EnhancedTaskDetailScreen>
       await _apiClient.deleteTask(widget.taskId);
       if (mounted) {
         Navigator.pop(context, true); // Return to previous screen
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Đã xóa task')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Đã xóa task')));
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Lỗi: $e'),
-            backgroundColor: AppColors.error,
-          ),
+          SnackBar(content: Text('Lỗi: $e'), backgroundColor: AppColors.error),
         );
       }
     }
@@ -1332,20 +1376,21 @@ class _EnhancedTaskDetailScreenState extends State<EnhancedTaskDetailScreen>
 
   Future<void> _updateStatus(String newStatus) async {
     try {
-      await _apiClient.updateTaskStatus(widget.taskId, newStatus, widget.userRole);
+      await _apiClient.updateTaskStatus(
+        widget.taskId,
+        newStatus,
+        widget.userRole,
+      );
       if (mounted) {
         await _loadTaskData();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Đã cập nhật trạng thái')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Đã cập nhật trạng thái')));
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Lỗi: $e'),
-            backgroundColor: AppColors.error,
-          ),
+          SnackBar(content: Text('Lỗi: $e'), backgroundColor: AppColors.error),
         );
       }
     }
@@ -1356,17 +1401,14 @@ class _EnhancedTaskDetailScreenState extends State<EnhancedTaskDetailScreen>
       await _apiClient.completeTask(widget.taskId);
       if (mounted) {
         await _loadTaskData();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Đã hoàn thành task')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Đã hoàn thành task')));
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Lỗi: $e'),
-            backgroundColor: AppColors.error,
-          ),
+          SnackBar(content: Text('Lỗi: $e'), backgroundColor: AppColors.error),
         );
       }
     }

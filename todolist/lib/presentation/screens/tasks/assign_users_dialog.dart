@@ -62,59 +62,42 @@ class _AssignUsersDialogState extends State<AssignUsersDialog> {
     });
 
     try {
-      // Sử dụng endpoint hiện có để lấy members
-      // TODO: Replace with actual workspace members endpoint when available
-      final response = await apiClient.dio.get('/api/workspaces/${widget.workspaceId}/members');
-      
-      final List<dynamic> data = response.data is List 
-          ? response.data 
-          : (response.data['members'] ?? []);
-      
+      // Sử dụng API method có sẵn để lấy workspace members
+      final users = await apiClient.getWorkspaceMembers(widget.workspaceId);
+
       setState(() {
-        _members = data.map((json) => WorkspaceMember.fromJson(json)).toList();
+        _members = users
+            .map(
+              (user) => WorkspaceMember(
+                userId: user.userId,
+                name: user.fullName ?? user.email,
+                email: user.email,
+                role:
+                    'Member', // Default role since UserModel doesn't include workspace role
+              ),
+            )
+            .toList();
         _isLoading = false;
       });
     } catch (e) {
-      // Fallback: Create mock data for demo
+      // Hiển thị lỗi thực tế, KHÔNG dùng mock data
       setState(() {
-        _members = _getMockMembers();
+        _members = [];
         _isLoading = false;
-        _error = 'Không tải được danh sách thành viên. Đang hiển thị dữ liệu mẫu.';
+        _error = 'Không thể tải danh sách thành viên: ${e.toString()}';
       });
     }
   }
 
-  List<WorkspaceMember> _getMockMembers() {
-    // Mock data for demo purposes
-    return [
-      WorkspaceMember(
-        userId: 'user1',
-        name: 'Nguyễn Văn A',
-        email: 'nguyenvana@example.com',
-        role: 'Member',
-      ),
-      WorkspaceMember(
-        userId: 'user2',
-        name: 'Trần Thị B',
-        email: 'tranthib@example.com',
-        role: 'Member',
-      ),
-      WorkspaceMember(
-        userId: 'user3',
-        name: 'Lê Văn C',
-        email: 'levanc@example.com',
-        role: 'ProjectManager',
-      ),
-    ];
-  }
+  // REMOVED: Mock data method - now using real API only
 
   List<WorkspaceMember> get _filteredMembers {
     if (_searchQuery.isEmpty) return _members;
-    
+
     return _members.where((member) {
       final query = _searchQuery.toLowerCase();
       return member.name.toLowerCase().contains(query) ||
-             member.email.toLowerCase().contains(query);
+          member.email.toLowerCase().contains(query);
     }).toList();
   }
 
@@ -126,9 +109,9 @@ class _AssignUsersDialogState extends State<AssignUsersDialog> {
       return;
     }
 
-    final newAssignees = _selectedUserIds.where(
-      (id) => !widget.currentAssigneeIds.contains(id)
-    ).toList();
+    final newAssignees = _selectedUserIds
+        .where((id) => !widget.currentAssigneeIds.contains(id))
+        .toList();
 
     if (newAssignees.isEmpty) {
       Navigator.pop(context, false);
@@ -154,10 +137,7 @@ class _AssignUsersDialogState extends State<AssignUsersDialog> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Lỗi: $e'),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text('Lỗi: $e'), backgroundColor: Colors.red),
         );
       }
     }
@@ -217,7 +197,7 @@ class _AssignUsersDialogState extends State<AssignUsersDialog> {
                 ),
               ],
             ),
-            
+
             const SizedBox(height: 24),
 
             // Search Bar
@@ -239,15 +219,19 @@ class _AssignUsersDialogState extends State<AssignUsersDialog> {
             // Selected Count
             if (_selectedUserIds.isNotEmpty)
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.indigo.shade50,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.check_circle, 
-                      color: Colors.indigo.shade700, 
+                    Icon(
+                      Icons.check_circle,
+                      color: Colors.indigo.shade700,
                       size: 18,
                     ),
                     const SizedBox(width: 8),
@@ -283,8 +267,9 @@ class _AssignUsersDialogState extends State<AssignUsersDialog> {
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.warning_amber_rounded, 
-                      color: Colors.orange.shade700, 
+                    Icon(
+                      Icons.warning_amber_rounded,
+                      color: Colors.orange.shade700,
                       size: 20,
                     ),
                     const SizedBox(width: 8),
@@ -322,7 +307,9 @@ class _AssignUsersDialogState extends State<AssignUsersDialog> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: ElevatedButton(
-                    onPressed: _selectedUserIds.isEmpty ? null : _assignSelectedUsers,
+                    onPressed: _selectedUserIds.isEmpty
+                        ? null
+                        : _assignSelectedUsers,
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       backgroundColor: Colors.indigo.shade600,
@@ -353,8 +340,8 @@ class _AssignUsersDialogState extends State<AssignUsersDialog> {
             Icon(Icons.search_off, size: 64, color: Colors.grey.shade400),
             const SizedBox(height: 16),
             Text(
-              _searchQuery.isEmpty 
-                  ? 'Không có thành viên nào' 
+              _searchQuery.isEmpty
+                  ? 'Không có thành viên nào'
                   : 'Không tìm thấy kết quả',
               style: GoogleFonts.inter(
                 fontSize: 16,
@@ -402,8 +389,8 @@ class _AssignUsersDialogState extends State<AssignUsersDialog> {
       ),
       child: CheckboxListTile(
         value: isSelected,
-        onChanged: isAlreadyAssigned 
-            ? null 
+        onChanged: isAlreadyAssigned
+            ? null
             : (value) {
                 setState(() {
                   if (value == true) {
@@ -459,8 +446,9 @@ class _AssignUsersDialogState extends State<AssignUsersDialog> {
               const SizedBox(height: 4),
               Row(
                 children: [
-                  Icon(Icons.check_circle, 
-                    size: 14, 
+                  Icon(
+                    Icons.check_circle,
+                    size: 14,
                     color: Colors.green.shade600,
                   ),
                   const SizedBox(width: 4),
@@ -478,15 +466,15 @@ class _AssignUsersDialogState extends State<AssignUsersDialog> {
           ],
         ),
         secondary: CircleAvatar(
-          backgroundColor: isAlreadyAssigned 
-              ? Colors.grey.shade300 
+          backgroundColor: isAlreadyAssigned
+              ? Colors.grey.shade300
               : Colors.indigo.shade100,
           child: Text(
             member.name.substring(0, 1).toUpperCase(),
             style: GoogleFonts.inter(
               fontWeight: FontWeight.bold,
-              color: isAlreadyAssigned 
-                  ? Colors.grey.shade600 
+              color: isAlreadyAssigned
+                  ? Colors.grey.shade600
                   : Colors.indigo.shade700,
             ),
           ),

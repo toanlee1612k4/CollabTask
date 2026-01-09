@@ -54,20 +54,25 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
     try {
       // Load user profile
       final user = await _apiClient.getCurrentUser();
-      
+
       // Load stats in parallel
       final productivityStats = await _apiClient.getUserStats();
       final workspaces = await _apiClient.getWorkspaces();
       final myTasksResult = await _apiClient.getMyTasks(page: 1, pageSize: 1);
-      
+
       final stats = {
         'totalTasksCompleted': productivityStats['totalTasksCompleted'] ?? 0,
-        'onTimeCompletionRate': productivityStats['onTimeCompletionRate'] ?? 0.0,
+        'onTimeCompletionRate':
+            productivityStats['onTimeCompletionRate'] ?? 0.0,
         'currentStreak': productivityStats['currentStreak'] ?? 0,
         'totalTasks': myTasksResult.totalCount,
         'totalWorkspaces': workspaces.length,
-        'ownedWorkspaces': workspaces.where((w) => w.ownerId == user.userId).length,
-        'memberWorkspaces': workspaces.where((w) => w.ownerId != user.userId).length,
+        'ownedWorkspaces': workspaces
+            .where((w) => w.ownerId == user.userId)
+            .length,
+        'memberWorkspaces': workspaces
+            .where((w) => w.ownerId != user.userId)
+            .length,
       };
 
       state = ProfileState(
@@ -77,10 +82,7 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
         error: null,
       );
     } catch (e) {
-      state = state.copyWith(
-        isLoading: false,
-        error: e.toString(),
-      );
+      state = state.copyWith(isLoading: false, error: e.toString());
     }
   }
 
@@ -91,7 +93,9 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
 
 // ==================== PROVIDER ====================
 
-final profileProvider = StateNotifierProvider<ProfileNotifier, ProfileState>((ref) {
+final profileProvider = StateNotifierProvider<ProfileNotifier, ProfileState>((
+  ref,
+) {
   return ProfileNotifier(apiClient);
 });
 
@@ -102,7 +106,8 @@ class ProfileSettingsScreen extends ConsumerStatefulWidget {
   const ProfileSettingsScreen({super.key});
 
   @override
-  ConsumerState<ProfileSettingsScreen> createState() => _ProfileSettingsScreenState();
+  ConsumerState<ProfileSettingsScreen> createState() =>
+      _ProfileSettingsScreenState();
 }
 
 class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
@@ -136,12 +141,17 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.error_outline, size: 64, color: Colors.red),
+                    const Icon(
+                      Icons.error_outline,
+                      size: 64,
+                      color: Colors.red,
+                    ),
                     const SizedBox(height: 16),
                     Text('Error: ${profileState.error}'),
                     const SizedBox(height: 16),
                     ElevatedButton(
-                      onPressed: () => ref.read(profileProvider.notifier).refresh(),
+                      onPressed: () =>
+                          ref.read(profileProvider.notifier).refresh(),
                       child: const Text('Thử lại'),
                     ),
                   ],
@@ -166,14 +176,10 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
       flexibleSpace: FlexibleSpaceBar(
         title: Text(
           'Profile & Settings',
-          style: GoogleFonts.inter(
-            fontWeight: FontWeight.w700,
-          ),
+          style: GoogleFonts.inter(fontWeight: FontWeight.w700),
         ),
         background: Container(
-          decoration: BoxDecoration(
-            gradient: AppColors.primaryGradient,
-          ),
+          decoration: BoxDecoration(gradient: AppColors.primaryGradient),
         ),
       ),
       actions: [
@@ -193,7 +199,7 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
 
   Widget _buildProfileHeader(ProfileState profileState) {
     final user = profileState.user!;
-    
+
     return Container(
       padding: const EdgeInsets.all(AppSpacing.lg),
       child: Column(
@@ -204,7 +210,9 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
                 radius: 60,
                 backgroundColor: AppColors.primary.withOpacity(0.1),
                 child: Text(
-                  (user.fullName ?? 'U').substring(0, (user.fullName?.length ?? 1) > 1 ? 2 : 1).toUpperCase(),
+                  (user.fullName ?? 'U')
+                      .substring(0, (user.fullName?.length ?? 1) > 1 ? 2 : 1)
+                      .toUpperCase(),
                   style: GoogleFonts.inter(
                     fontSize: 36,
                     fontWeight: FontWeight.w700,
@@ -292,7 +300,7 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
 
   Widget _buildProfileInfo(ProfileState profileState) {
     final stats = profileState.stats ?? {};
-    
+
     return Card(
       margin: const EdgeInsets.all(AppSpacing.md),
       elevation: AppElevation.low,
@@ -313,7 +321,7 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
               ),
             ),
             const SizedBox(height: AppSpacing.md),
-            
+
             // Stats Grid
             if (stats.isNotEmpty) ...[
               Row(
@@ -382,12 +390,10 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
                 ],
               ),
             ] else
-              const Center(
-                child: CircularProgressIndicator(),
-              ),
-              
+              const Center(child: CircularProgressIndicator()),
+
             const Divider(height: AppSpacing.xl),
-            
+
             Text(
               'Thông tin cá nhân',
               style: GoogleFonts.inter(
@@ -397,14 +403,26 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
               ),
             ),
             const SizedBox(height: AppSpacing.md),
-            _buildInfoRow('Full Name', profileState.user!.fullName ?? 'N/A', Icons.person_rounded),
-            _buildInfoRow('Email', profileState.user!.email, Icons.email_rounded),
-            _buildInfoRow('User ID', profileState.user!.userId, Icons.fingerprint_rounded),
+            _buildInfoRow(
+              'Full Name',
+              profileState.user!.fullName ?? 'N/A',
+              Icons.person_rounded,
+            ),
+            _buildInfoRow(
+              'Email',
+              profileState.user!.email,
+              Icons.email_rounded,
+            ),
+            _buildInfoRow(
+              'User ID',
+              profileState.user!.userId,
+              Icons.fingerprint_rounded,
+            ),
             _buildInfoRow(
               'Member Since',
-              profileState.user!.createdAt != null 
-                ? '${profileState.user!.createdAt!.day}/${profileState.user!.createdAt!.month}/${profileState.user!.createdAt!.year}'
-                : 'N/A',
+              profileState.user!.createdAt != null
+                  ? '${profileState.user!.createdAt!.day}/${profileState.user!.createdAt!.month}/${profileState.user!.createdAt!.year}'
+                  : 'N/A',
               Icons.calendar_today_rounded,
             ),
           ],
@@ -464,7 +482,10 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
       child: Column(
         children: [
           ListTile(
-            leading: Icon(Icons.notifications_rounded, color: AppColors.primary),
+            leading: Icon(
+              Icons.notifications_rounded,
+              color: AppColors.primary,
+            ),
             title: const Text('Notifications'),
             subtitle: const Text('Manage notification preferences'),
             trailing: Switch(
@@ -473,7 +494,11 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
                 setState(() => _notificationsEnabled = value);
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: Text(value ? 'Notifications enabled' : 'Notifications disabled'),
+                    content: Text(
+                      value
+                          ? 'Notifications enabled'
+                          : 'Notifications disabled',
+                    ),
                     backgroundColor: AppColors.success,
                   ),
                 );
@@ -495,7 +520,9 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
                     if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                          content: Text('Đã ${value ? 'bật' : 'tắt'} Dark Mode'),
+                          content: Text(
+                            'Đã ${value ? 'bật' : 'tắt'} Dark Mode',
+                          ),
                           backgroundColor: AppColors.success,
                         ),
                       );
@@ -531,10 +558,7 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
         children: [
           ListTile(
             leading: Icon(Icons.logout_rounded, color: AppColors.error),
-            title: Text(
-              'Sign Out',
-              style: TextStyle(color: AppColors.error),
-            ),
+            title: Text('Sign Out', style: TextStyle(color: AppColors.error)),
             onTap: _signOut,
           ),
           const Divider(height: 1),
@@ -619,9 +643,18 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
     );
 
     if (confirm == true && mounted) {
+      // 1. Gọi API logout để invalidate token trên server
       await apiClient.logout();
+
+      // 2. CRITICAL: Clear Riverpod AuthNotifier state
+      // Đây là bước quan trọng nhất - nếu không có, state vẫn là authenticated!
+      await ref.read(authProvider.notifier).logout();
+
+      // 3. Navigate đến login và xóa hết route stack
       if (mounted) {
-        Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
+        Navigator.of(
+          context,
+        ).pushNamedAndRemoveUntil('/login', (route) => false);
       }
     }
   }
@@ -630,17 +663,16 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(
-          'Delete Account',
-          style: TextStyle(color: AppColors.error),
-        ),
+        title: Text('Delete Account', style: TextStyle(color: AppColors.error)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text('⚠️ This action cannot be undone!'),
             const SizedBox(height: 16),
-            const Text('Your account and all associated data will be permanently deleted:'),
+            const Text(
+              'Your account and all associated data will be permanently deleted:',
+            ),
             const SizedBox(height: 8),
             const Text('• All tasks and workspaces'),
             const Text('• Comments and activity history'),

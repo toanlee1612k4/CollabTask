@@ -1,5 +1,41 @@
 import 'package:flutter/foundation.dart';
 
+// 🔧 Helper function để parse assigneeUserIds từ nhiều format Backend có thể trả về
+List<String>? _parseAssigneeUserIds(Map<String, dynamic> json) {
+  // Format 1: assigneeUserIds (array of strings) - Standard format
+  if (json['assigneeUserIds'] != null && json['assigneeUserIds'] is List) {
+    return (json['assigneeUserIds'] as List)
+        .map((id) => id.toString())
+        .toList();
+  }
+  
+  // Format 2: assigneeUserID (single string) - Legacy format
+  if (json['assigneeUserID'] != null) {
+    final singleId = json['assigneeUserID'].toString();
+    if (singleId.isNotEmpty) return [singleId];
+  }
+  
+  // Format 3: assignees (array of objects with userId) - Alternate format
+  if (json['assignees'] != null && json['assignees'] is List) {
+    final assignees = json['assignees'] as List;
+    return assignees
+        .where((a) => a['userId'] != null || a['userID'] != null)
+        .map((a) => (a['userId'] ?? a['userID']).toString())
+        .toList();
+  }
+  
+  // Format 4: taskAssignments (from Backend relationship)
+  if (json['taskAssignments'] != null && json['taskAssignments'] is List) {
+    final assignments = json['taskAssignments'] as List;
+    return assignments
+        .where((a) => a['userID'] != null || a['userId'] != null)
+        .map((a) => (a['userID'] ?? a['userId']).toString())
+        .toList();
+  }
+  
+  return null; // Will default to empty list in constructor
+}
+
 // Paginated Result wrapper
 class PagedResult<T> {
   final List<T> items;
@@ -66,9 +102,11 @@ class TaskModel {
       priorityScore: (json['priorityScore'] ?? 0.0).toDouble(),
       aiReason: json['aiReason']?.toString() ?? json['reason']?.toString(), // NEW
       workspaceId: json['workspaceId']?.toString(),
-      assigneeUserIds: (json['assigneeUserIds'] as List<dynamic>?)
-          ?.map((id) => id.toString())
-          .toList(),
+      // 🔧 FIX: Handle cả 3 trường hợp từ Backend:
+      // 1. assigneeUserIds (array) - chuẩn
+      // 2. assigneeUserID (single string) - legacy
+      // 3. assignees (array of objects with userId) - alternate format
+      assigneeUserIds: _parseAssigneeUserIds(json),
       // Convert UTC to local time when receiving from API
       createdAt: json['createdAt'] != null ? DateTime.parse(json['createdAt']).toLocal() : null,
       updatedAt: json['updatedAt'] != null ? DateTime.parse(json['updatedAt']).toLocal() : null,
@@ -99,10 +137,36 @@ class TaskModel {
   // Helper methods
   bool get isOverdue {
     if (deadline == null) return false;
-    return DateTime.now().isAfter(deadline!) && status != 'Completed';
+    return DateTime.now().isAfter(deadline!) && 
+           status.toLowerCase() != 'completed' && 
+           status.toLowerCase() != 'done';
   }
 
   bool get isHighPriority => priorityScore >= 8.0;
+  
+  /// Task được AI gợi ý (priorityScore > 0 hoặc có aiReason)
+  bool get isAiSuggested => priorityScore > 0 || (aiReason != null && aiReason!.isNotEmpty);
+  
+  /// Task có deadline trong hôm nay
+  bool get isDueToday {
+    if (deadline == null) return false;
+    final now = DateTime.now();
+    return deadline!.year == now.year && 
+           deadline!.month == now.month && 
+           deadline!.day == now.day;
+  }
+  
+  /// Task có deadline trong tuần này
+  bool get isDueThisWeek {
+    if (deadline == null) return false;
+    final now = DateTime.now();
+    final startOfWeek = now.subtract(Duration(days: now.weekday - 1));
+    final endOfWeek = startOfWeek.add(const Duration(days: 6));
+    return deadline!.isAfter(startOfWeek) && deadline!.isBefore(endOfWeek.add(const Duration(days: 1)));
+  }
+  
+  /// Task là cá nhân (không có workspaceId)
+  bool get isPersonalTask => workspaceId == null || workspaceId!.isEmpty;
 
   String get priorityLabel {
     switch (priority.toLowerCase()) {

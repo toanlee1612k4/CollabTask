@@ -37,7 +37,8 @@ class AiSuggestionsState {
 // ==================== AI SUGGESTIONS NOTIFIER ====================
 
 /// StateNotifier quản lý logic AI Suggestions
-/// - Gọi API /api/tasks/suggested
+/// - Gọi API /api/productivity/suggested-tasks (hoặc /api/suggested fallback)
+/// - KHÔNG gọi /api/tasks rồi tự sort!
 /// - Xử lý loading/error states
 /// - Cache kết quả và timestamp
 class AiSuggestionsNotifier extends StateNotifier<AiSuggestionsState> {
@@ -49,19 +50,23 @@ class AiSuggestionsNotifier extends StateNotifier<AiSuggestionsState> {
   }
 
   /// Load AI suggested tasks from server
+  /// ⚠️ QUAN TRỌNG: Gọi endpoint AI đã tính toán score, KHÔNG tự sort ở Frontend!
   Future<void> loadSuggestions() async {
     // Set loading state
     state = state.copyWith(isLoading: true, error: null);
 
     try {
       // Call API - Endpoint trả về tasks đã sorted by priorityScore DESC
-      final response = await _apiClient.dio.get('/api/tasks/suggested');
-      
+      // Sử dụng endpoint mới /api/productivity/suggested-tasks
+      final response = await _apiClient.dio.get(
+        '/api/productivity/suggested-tasks',
+      );
+
       // Parse response
-      final List<dynamic> data = response.data is List 
+      final List<dynamic> data = response.data is List
           ? response.data as List
           : (response.data as Map<String, dynamic>)['tasks'] ?? [];
-      
+
       final tasks = data.map((json) => TaskModel.fromJson(json)).toList();
 
       // Update state with success
@@ -73,10 +78,7 @@ class AiSuggestionsNotifier extends StateNotifier<AiSuggestionsState> {
       );
     } catch (e) {
       // Update state with error
-      state = state.copyWith(
-        isLoading: false,
-        error: e.toString(),
-      );
+      state = state.copyWith(isLoading: false, error: e.toString());
     }
   }
 
@@ -90,6 +92,7 @@ class AiSuggestionsNotifier extends StateNotifier<AiSuggestionsState> {
 
 /// Provider cho AI Suggestions
 /// Sử dụng apiClient từ main.dart
-final aiSuggestionsProvider = StateNotifierProvider<AiSuggestionsNotifier, AiSuggestionsState>((ref) {
-  return AiSuggestionsNotifier(apiClient);
-});
+final aiSuggestionsProvider =
+    StateNotifierProvider<AiSuggestionsNotifier, AiSuggestionsState>((ref) {
+      return AiSuggestionsNotifier(apiClient);
+    });

@@ -82,5 +82,30 @@ namespace CollabTask.Api.Controllers
                 return BadRequest(new { message = $"Seeding AI test data failed: {ex.Message}", detail = ex.ToString() });
             }
         }
+
+        /// <summary>
+        /// Clear and reseed with 1000 tasks per user for AI testing
+        /// </summary>
+        [HttpPost("reseed-ai-test")]
+        public async Task<IActionResult> ReseedAITestData()
+        {
+            try
+            {
+                await _seeder.ClearDataAsync();
+                await _seeder.SeedLargeTaskDataForAITestingAsync();
+                return Ok(new { 
+                    message = "Database reseeded with AI test data! 6000 tasks created (1000/user).",
+                    endpoints = new {
+                        test_bob = "GET /api/productivity/tasks/suggested - Login as bob@example.com (overdue priority)",
+                        test_charlie = "GET /api/productivity/tasks/suggested - Login as charlie@example.com (short tasks first)",
+                        test_diana = "GET /api/productivity/tasks/suggested - Login as diana@example.com (high priority first)"
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = $"Reseeding AI test data failed: {ex.Message}", detail = ex.ToString() });
+            }
+        }
     }
 }

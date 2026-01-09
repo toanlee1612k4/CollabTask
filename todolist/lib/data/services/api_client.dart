@@ -227,6 +227,11 @@ class ApiClient {
           if (data['message'] != null) {
             print('📋 [API] Message: ${data['message']}');
           }
+          // 🔍 DEBUG: In ra raw JSON của task đầu tiên để kiểm tra cấu trúc
+          if (tasksJson.isNotEmpty) {
+            print('🔍 [DEBUG] Raw JSON of first task:');
+            print('   ${jsonEncode(tasksJson.first)}');
+          }
         }
       } else if (response.data is List) {
         // Old format: direct array
@@ -894,6 +899,24 @@ class ApiClient {
     try {
       final response = await _dio.put('/api/notifications/$notificationId/read');
       return NotificationModel.fromJson(response.data);
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  /// Delete a notification
+  Future<void> deleteNotification(String notificationId) async {
+    try {
+      await _dio.delete('/api/notifications/$notificationId');
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  /// Mark all notifications as read
+  Future<void> markAllNotificationsAsRead() async {
+    try {
+      await _dio.put('/api/notifications/read-all');
     } on DioException catch (e) {
       throw _handleError(e);
     }
